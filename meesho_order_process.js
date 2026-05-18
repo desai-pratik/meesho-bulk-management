@@ -4,7 +4,7 @@ const path = require('path');
 
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
-const DOWNLOAD_PATH = String.raw`C:\Jewellery-Agent\labels`;
+const DOWNLOAD_PATH = String.raw`C:\meesho-bulk-management\labels`;
 
 // Ensure download directory exists
 if (!fs.existsSync(DOWNLOAD_PATH)) {
@@ -50,6 +50,8 @@ async function nukePopups(page) {
                 return (rect.width > winW * 0.8) || (cx > winW * 0.2 && cx < winW * 0.8);
             }
 
+            let actionTaken = false;
+
             // 0. HANDLE SPECIAL AUTH POPUPS (Must click, not close!)
             let authorisedSpecial = false;
             const buttonsOrLinks = Array.from(document.querySelectorAll('button, a, span'));
@@ -58,9 +60,10 @@ async function nukePopups(page) {
                     const clickable = el.closest('button') || el;
                     clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
                     authorisedSpecial = true;
+                    actionTaken = true;
                 }
             }
-            if (authorisedSpecial) return 'auth_clicked'; // Exit evaluation early to allow React to process the click properly!
+            if (authorisedSpecial) return { authClicked: true, actionTaken: true }; // Exit evaluation early to allow React to process the click properly!
 
             // 1. Target recognized annoying panels specifically and hide them
             const allDivs = Array.from(document.querySelectorAll('div, p, h4, h2'));
@@ -84,7 +87,10 @@ async function nukePopups(page) {
                         }
                     }
                     if (parent && parent.tagName !== 'BODY' && parent.id !== 'root' && isCentral(parent)) {
-                        parent.style.setProperty('display', 'none', 'important');
+                        if (parent.style.display !== 'none') {
+                            parent.style.setProperty('display', 'none', 'important');
+                            actionTaken = true;
+                        }
                     }
                 }
             }
@@ -97,12 +103,17 @@ async function nukePopups(page) {
                 '[class*="backdrop"]',
                 '[class*="joyride"]',
                 '[class*="tour"]',
-                '[class*="guide"]'
+                '[class*="guide"]',
+                '[class*="m_177_"]',
+                'div[aria-label="Close modal"]'
             ];
             document.querySelectorAll(selectors.join(', ')).forEach(el => {
                 if (isCentral(el)) {
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('pointer-events', 'none', 'important');
+                    if (el.style.display !== 'none') {
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                        actionTaken = true;
+                    }
                 }
             });
 
@@ -119,8 +130,10 @@ async function nukePopups(page) {
                     while (curr && curr.tagName !== 'BODY') {
                         const style = window.getComputedStyle(curr);
                         if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex || 0) > 10) {
-                            isPopup = true;
-                            popupContainer = curr;
+                            if (style.display !== 'none') {
+                                isPopup = true;
+                                popupContainer = curr;
+                            }
                             break;
                         }
                         curr = curr.parentElement;
@@ -131,30 +144,43 @@ async function nukePopups(page) {
                         try {
                             const clickable = svg.closest('button') || svg;
                             clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            actionTaken = true;
                         } catch (e) { }
                     }
                 }
             });
-            return 'cleaned';
+            return { authClicked: false, actionTaken: actionTaken };
         });
-        return result === 'auth_clicked';
+        return result;
     } catch (e) {
-        return false;
+        return { authClicked: false, actionTaken: false };
     }
 }
 
 // Function to clear dashboard immediately after login
 async function clearDashboard(page) {
-    console.log("  > Waiting 5s for dashboard ads to load...");
-    await page.waitForTimeout(5000);
+    console.log("  > Checking for dashboard ads...");
+    // Give page a moment to render any initial popups
+    await page.waitForTimeout(1000);
 
-    console.log("  > Running cleanup loop for 5s...");
-    const endTime = Date.now() + 5000;
-    while (Date.now() < endTime) {
-        await nukePopups(page);
-        await page.waitForTimeout(500);
+    let popupsHandled = 0;
+    // Try up to 4 times (roughly 2 seconds max if no popups)
+    for (let i = 0; i < 4; i++) {
+        const nukeResult = await nukePopups(page);
+        if (nukeResult && nukeResult.actionTaken) {
+            popupsHandled++;
+            await page.waitForTimeout(500); // Wait for animations
+        } else {
+            // No more popups detected, we can break early!
+            break;
+        }
     }
-    console.log("  > Dashboard cleanup done.");
+
+    if (popupsHandled > 0) {
+        console.log("  > Dashboard ads detected and cleaned up.");
+    } else {
+        console.log("  > No dashboard ads found. Proceeding fast.");
+    }
 }
 
 // Dedicated function to handle the "We are having trouble" error page
@@ -217,8 +243,8 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
             await handleErrorPage(page);
 
             // 1. Nuke before clicking
-            const authClicked = await nukePopups(page);
-            if (authClicked) {
+            const nukeResult = await nukePopups(page);
+            if (nukeResult && nukeResult.authClicked) {
                 console.log(`  > Special Auth button clicked. Waiting for page state to advance...`);
                 await page.waitForTimeout(2000);
 
@@ -350,7 +376,7 @@ async function processAccount(browser, account) {
             const selectAllPending = page.locator('input[type="checkbox"]').first();
             if (await selectAllPending.isVisible()) {
                 console.log(`[${username}] Selecting all pending orders...`);
-                await selectAllPending.check();
+                await selectAllPending.check({ force: true });
                 await page.waitForTimeout(1000);
             }
 
@@ -369,7 +395,7 @@ async function processAccount(browser, account) {
                     if (await confirmPopupBtn.isVisible()) {
                         console.log(`[${username}] Clicking 'Accept Order' in popup...`);
                         await confirmPopupBtn.click({ force: true });
-                        
+
                         // Wait for "Got it" success popup dynamically, handling any loading duration
                         console.log(`[${username}] Waiting for loading to finish and success confirmation popup to appear...`);
                         try {
@@ -383,7 +409,7 @@ async function processAccount(browser, account) {
                                 }
                                 return false;
                             }, { timeout: 90000, polling: 1000 }); // Poll every 1 second for up to 90 seconds
-                            
+
                             if (gotItClicked) {
                                 console.log(`[${username}] Found 'Got it' button and clicked it.`);
                             }
@@ -391,7 +417,7 @@ async function processAccount(browser, account) {
                         } catch (e) {
                             console.log(`[${username}] 'Got it' popup did not appear in time. Proceeding...`);
                         }
-                        
+
                         console.log(`[${username}] Orders accepted explicitly from popup.`);
                     }
                 } catch (e) {
@@ -407,10 +433,10 @@ async function processAccount(browser, account) {
         }
 
         // --- READY TO SHIP HANDLING ---
-        console.log(`[${username}] Waiting 10 Seconds for orders to move to Ready to Ship...`);
-        await page.waitForTimeout(10000); // 10 seconds wait
+        // console.log(`[${username}] Waiting 10 Seconds for orders to move to Ready to Ship...`);
+        // await page.waitForTimeout(10000); // 10 seconds wait
         await page.reload();
-        await page.waitForTimeout(5000);
+        // await page.waitForTimeout(5000);
         await clearDashboard(page);
 
         console.log(`[${username}] Moving to Ready to Ship tab...`);
@@ -420,6 +446,32 @@ async function processAccount(browser, account) {
             await page.waitForTimeout(3000);
             await nukePopups(page);
 
+            // --- FILTER: Label Downloaded = No ---
+            try {
+                console.log(`[${username}] Applying filter: Label Downloaded -> No`);
+                
+                // Find the dropdown containing "Label downloaded"
+                const labelDropdown = page.getByText('Label downloaded', { exact: false }).last();
+                await clickWithRetry(page, labelDropdown, 'Label Downloaded Dropdown');
+                await page.waitForTimeout(1000); // Wait for dropdown to open
+                
+                // Click the "No" option
+                const noOption = page.getByText('No', { exact: true }).last();
+                await noOption.waitFor({ state: 'visible', timeout: 3000 });
+                await noOption.click({ force: true });
+                
+                // Wait for the table to reload with the filtered data
+                console.log(`[${username}] Waiting 3 seconds for filtered results to load...`);
+                await page.waitForTimeout(3000);
+                
+                // Close the dropdown if it didn't auto-close (by clicking the header again or clicking elsewhere)
+                // Sometimes clicking away is safer
+                await page.mouse.click(10, 10);
+                await page.waitForTimeout(1000);
+            } catch (e) {
+                console.log(`[${username}] Failed to apply filter 'Label Downloaded -> No': ${e.message}`);
+            }
+
             // Select all ready to ship orders
             const selectAllReady = page.locator('input[type="checkbox"]').first();
             try {
@@ -428,7 +480,7 @@ async function processAccount(browser, account) {
                 console.log(`[${username}] Selecting all ready to ship orders...`);
                 await selectAllReady.check({ force: true });
                 await page.waitForTimeout(1000);
-            } catch(e) {
+            } catch (e) {
                 console.log(`[${username}] 'Select All' checkbox not visible or timed out.`);
             }
 
@@ -447,11 +499,33 @@ async function processAccount(browser, account) {
                 const popupDialog = page.getByRole('dialog').first();
                 await popupDialog.waitFor({ state: 'visible', timeout: 15000 });
 
-                // Now wait for the actual inner "Label" button to appear (meaning progress bar is done)
+                // Now wait for the actual inner "Label" button to appear (meaning progress bar is done) OR an error
                 console.log(`[${username}] Waiting for progress bar to finish...`);
                 const innerLabelBtn = popupDialog.locator('button:has-text("Label")').first()
                     .or(popupDialog.getByRole('button', { name: 'Label', exact: true }).first());
-                await innerLabelBtn.waitFor({ state: 'visible', timeout: 60000 });
+                const errorText = popupDialog.getByText('Temporary Issue', { exact: false });
+
+                const targetLocator = innerLabelBtn.or(errorText);
+                
+                // Check if page is still open before waiting
+                if (page.isClosed()) {
+                    throw new Error("Page closed before label generation finished.");
+                }
+                
+                await targetLocator.waitFor({ state: 'visible', timeout: 60000 });
+
+                if (await errorText.isVisible()) {
+                    console.log(`[${username}] WARNING: Temporary Issue with Label Generation detected! Clicking 'Got it'...`);
+                    const gotItBtn = popupDialog.getByRole('button', { name: 'Got it', exact: true }).or(popupDialog.locator('button:has-text("Got it")'));
+                    if (await gotItBtn.isVisible()) {
+                        await gotItBtn.click({ force: true });
+                        await page.waitForTimeout(1000);
+                    }
+
+                    console.log(`[${username}] Process ends here for this account due to temporary issue.`);
+                    return { username, labelDownloaded: false, infoMessage: "Temporary Issue - some orders not downloaded" };
+                }
+
                 console.log(`[${username}] Labels generated successfully!`);
 
                 // Uncheck manifest
@@ -481,7 +555,7 @@ async function processAccount(browser, account) {
                 console.log(`[${username}] SUCCESS: Labels downloaded to ${downloadPath}`);
                 labelDownloaded = true;
 
-            } catch(e) {
+            } catch (e) {
                 console.log(`[${username}] Expected UI flow for 'Label' generation failed or no ready to ship orders: ${e.message}`);
             }
 
@@ -555,6 +629,8 @@ async function runBot() {
         console.log(`\nACCOUNT: ${r.username}`);
         if (r.globalError) {
             console.log(`  STATUS: ❌ Session Failed - ${r.globalError}`);
+        } else if (r.infoMessage) {
+            console.log(`  STATUS: ℹ️ Information - ${r.infoMessage}`);
         } else if (r.labelDownloaded) {
             console.log(`  STATUS: ✅ Labels Downloaded Successfully`);
         } else {

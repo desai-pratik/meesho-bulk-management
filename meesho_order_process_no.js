@@ -4,9 +4,12 @@ const path = require('path');
 
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
-// UPDATE THIS TO YOUR FOLDER PATH
-// const FILE_PATH = String.raw`c:\Users\ASUS\Downloads\pratik`;
-const FILE_PATH = String.raw`C:\meesho-bulk-management\uploaded-files`;
+const DOWNLOAD_PATH = String.raw`C:\meesho-bulk-management\labels`;
+
+// Ensure download directory exists
+if (!fs.existsSync(DOWNLOAD_PATH)) {
+    fs.mkdirSync(DOWNLOAD_PATH, { recursive: true });
+}
 
 // Helper to read accounts
 function getAccounts() {
@@ -21,23 +24,6 @@ function getAccounts() {
         console.error("Error reading accounts.csv:", e.message);
         return [];
     }
-}
-
-// Helper to find files
-function getUploadFiles() {
-    if (fs.existsSync(FILE_PATH)) {
-        const stats = fs.statSync(FILE_PATH);
-        if (stats.isDirectory()) {
-            // Get all .xlsx files in the directory
-            const files = fs.readdirSync(FILE_PATH)
-                .filter(f => !f.startsWith('.') && f.endsWith('.xlsx'))
-                .map(f => path.join(FILE_PATH, f));
-            return files;
-        } else {
-            return [FILE_PATH];
-        }
-    }
-    return [];
 }
 
 // FAST MODE: Minimal delay
@@ -64,6 +50,8 @@ async function nukePopups(page) {
                 return (rect.width > winW * 0.8) || (cx > winW * 0.2 && cx < winW * 0.8);
             }
 
+            let actionTaken = false;
+
             // 0. HANDLE SPECIAL AUTH POPUPS (Must click, not close!)
             let authorisedSpecial = false;
             const buttonsOrLinks = Array.from(document.querySelectorAll('button, a, span'));
@@ -72,11 +60,10 @@ async function nukePopups(page) {
                     const clickable = el.closest('button') || el;
                     clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
                     authorisedSpecial = true;
+                    actionTaken = true;
                 }
             }
-            if (authorisedSpecial) return 'auth_clicked'; // Exit evaluation early to allow React to process the click properly!
-
-
+            if (authorisedSpecial) return { authClicked: true, actionTaken: true }; // Exit evaluation early to allow React to process the click properly!
 
             // 1. Target recognized annoying panels specifically and hide them
             const allDivs = Array.from(document.querySelectorAll('div, p, h4, h2'));
@@ -100,7 +87,10 @@ async function nukePopups(page) {
                         }
                     }
                     if (parent && parent.tagName !== 'BODY' && parent.id !== 'root' && isCentral(parent)) {
-                        parent.style.setProperty('display', 'none', 'important');
+                        if (parent.style.display !== 'none') {
+                            parent.style.setProperty('display', 'none', 'important');
+                            actionTaken = true;
+                        }
                     }
                 }
             }
@@ -117,8 +107,11 @@ async function nukePopups(page) {
             ];
             document.querySelectorAll(selectors.join(', ')).forEach(el => {
                 if (isCentral(el)) {
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('pointer-events', 'none', 'important');
+                    if (el.style.display !== 'none') {
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                        actionTaken = true;
+                    }
                 }
             });
 
@@ -135,8 +128,10 @@ async function nukePopups(page) {
                     while (curr && curr.tagName !== 'BODY') {
                         const style = window.getComputedStyle(curr);
                         if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex || 0) > 10) {
-                            isPopup = true;
-                            popupContainer = curr;
+                            if (style.display !== 'none') {
+                                isPopup = true;
+                                popupContainer = curr;
+                            }
                             break;
                         }
                         curr = curr.parentElement;
@@ -147,30 +142,43 @@ async function nukePopups(page) {
                         try {
                             const clickable = svg.closest('button') || svg;
                             clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            actionTaken = true;
                         } catch (e) { }
                     }
                 }
             });
-            return 'cleaned';
+            return { authClicked: false, actionTaken: actionTaken };
         });
-        return result === 'auth_clicked';
+        return result;
     } catch (e) {
-        return false;
+        return { authClicked: false, actionTaken: false };
     }
 }
 
 // Function to clear dashboard immediately after login
 async function clearDashboard(page) {
-    console.log("  > Waiting 5s for dashboard ads to load...");
-    await page.waitForTimeout(5000);
+    console.log("  > Checking for dashboard ads...");
+    // Give page a moment to render any initial popups
+    await page.waitForTimeout(1000);
 
-    console.log("  > Running cleanup loop for 5s...");
-    const endTime = Date.now() + 5000;
-    while (Date.now() < endTime) {
-        await nukePopups(page);
-        await page.waitForTimeout(500);
+    let popupsHandled = 0;
+    // Try up to 4 times (roughly 2 seconds max if no popups)
+    for (let i = 0; i < 4; i++) {
+        const nukeResult = await nukePopups(page);
+        if (nukeResult && nukeResult.actionTaken) {
+            popupsHandled++;
+            await page.waitForTimeout(500); // Wait for animations
+        } else {
+            // No more popups detected, we can break early!
+            break;
+        }
     }
-    console.log("  > Dashboard cleanup done.");
+
+    if (popupsHandled > 0) {
+        console.log("  > Dashboard ads detected and cleaned up.");
+    } else {
+        console.log("  > No dashboard ads found. Proceeding fast.");
+    }
 }
 
 // Dedicated function to handle the "We are having trouble" error page
@@ -233,8 +241,8 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
             await handleErrorPage(page);
 
             // 1. Nuke before clicking
-            const authClicked = await nukePopups(page);
-            if (authClicked) {
+            const nukeResult = await nukePopups(page);
+            if (nukeResult && nukeResult.authClicked) {
                 console.log(`  > Special Auth button clicked. Waiting for page state to advance...`);
                 await page.waitForTimeout(2000);
 
@@ -285,14 +293,7 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                     if (handled) {
                         console.log("  > Retrying action after handling error page...");
                     } else {
-                        if (name === 'Catalog Uploads' && i >= 2) {
-                            console.log("  > 'Catalog Uploads' stuck. Reloading page...");
-                            await page.reload();
-                            await page.waitForTimeout(5000);
-                            await clearDashboard(page); // Clear ads again after reload
-                        } else {
-                            console.log("  > Retrying action...");
-                        }
+                        console.log("  > Retrying action...");
                     }
                     continue; // Retry the loop
                 }
@@ -308,13 +309,14 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
     throw new Error(`Failed to click '${name}' (or verify next step) after 5 attempts.`);
 }
 
-async function processAccount(browser, account, uploadFiles) {
+async function processAccount(browser, account) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
     const context = await browser.newContext({
         viewport: null,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        acceptDownloads: true // Crucial for downloading labels automatically
     });
 
     // Inject stealth scripts to look like a human
@@ -331,8 +333,8 @@ async function processAccount(browser, account, uploadFiles) {
 
     const page = await context.newPage();
 
-    const fileResults = [];
     let globalError = null;
+    let labelDownloaded = false;
 
     try {
         // 1. Login
@@ -353,114 +355,214 @@ async function processAccount(browser, account, uploadFiles) {
         // 2. Clear Dashboard Ads
         await clearDashboard(page);
 
-        // Loop through ALL files
-        for (let i = 0; i < uploadFiles.length; i++) {
-            const currentFile = uploadFiles[i];
-            const fileName = path.basename(currentFile);
-            console.log(`\n[${username}] Processing File ${i + 1}/${uploadFiles.length}: ${fileName}`);
+        // 3. Go to Orders section
+        console.log(`[${username}] Going to Orders page...`);
+        const ordersMenu = page.getByText('Orders', { exact: true }).first();
+        await clickWithRetry(page, ordersMenu, 'Orders Menu');
+        await page.waitForTimeout(3000);
+        await nukePopups(page);
+
+        // --- PENDING ORDERS HANDLING ---
+        console.log(`[${username}] Checking Pending Orders...`);
+        try {
+            const pendingTab = page.getByRole('tab', { name: /Pending/i }).or(page.getByText('Pending').first());
+            await clickWithRetry(page, pendingTab, 'Pending Tab');
+            await page.waitForTimeout(3000);
+            await nukePopups(page);
+
+            // Attempt to look for checkboxes to select all in the table header or globally
+            const selectAllPending = page.locator('input[type="checkbox"]').first();
+            if (await selectAllPending.isVisible()) {
+                console.log(`[${username}] Selecting all pending orders...`);
+                await selectAllPending.check();
+                await page.waitForTimeout(1000);
+            }
+
+            // Click the specific "Accept Selected Orders" button at the bottom
+            const acceptBtn = page.locator('button:has-text("Accept Selected Orders")').last();
+
+            if (await acceptBtn.isVisible()) {
+                console.log(`[${username}] Found Accept Selected Orders button. Clicking...`);
+                await clickWithRetry(page, acceptBtn, 'Accept Orders Button');
+
+                await page.waitForTimeout(1000); // Tiny pause for animation
+
+                try {
+                    const confirmPopupBtn = page.getByRole('button', { name: 'Accept Order', exact: true }).last();
+
+                    if (await confirmPopupBtn.isVisible()) {
+                        console.log(`[${username}] Clicking 'Accept Order' in popup...`);
+                        await confirmPopupBtn.click({ force: true });
+
+                        // Wait for "Got it" success popup dynamically, handling any loading duration
+                        console.log(`[${username}] Waiting for loading to finish and success confirmation popup to appear...`);
+                        try {
+                            const gotItClicked = await page.waitForFunction(() => {
+                                const btns = Array.from(document.querySelectorAll('button'));
+                                const gotItBtn = btns.find(b => b.innerText && (b.innerText.trim().toLowerCase() === 'got it'));
+                                // offsetParent !== null is a fast way to check if an element is visibly rendered in the DOM
+                                if (gotItBtn && gotItBtn.offsetParent !== null) {
+                                    gotItBtn.click();
+                                    return true;
+                                }
+                                return false;
+                            }, { timeout: 90000, polling: 1000 }); // Poll every 1 second for up to 90 seconds
+
+                            if (gotItClicked) {
+                                console.log(`[${username}] Found 'Got it' button and clicked it.`);
+                            }
+                            await page.waitForTimeout(2000); // 2 seconds leeway for the popup to completely animate out
+                        } catch (e) {
+                            console.log(`[${username}] 'Got it' popup did not appear in time. Proceeding...`);
+                        }
+
+                        console.log(`[${username}] Orders accepted explicitly from popup.`);
+                    }
+                } catch (e) {
+                    console.log(`[${username}] Popup handling skipped or errored: ${e.message}`);
+                }
+
+            } else {
+                console.log(`[${username}] No Accept Selected Orders button found. Probably no pending orders.`);
+            }
+
+        } catch (e) {
+            console.log(`[${username}] Expected UI flow for pending not found, or no pending orders: ${e.message}`);
+        }
+
+        // --- READY TO SHIP HANDLING ---
+        // console.log(`[${username}] Waiting 10 Seconds for orders to move to Ready to Ship...`);
+        // await page.waitForTimeout(10000); // 10 seconds wait
+        await page.reload();
+        // await page.waitForTimeout(5000);
+        await clearDashboard(page);
+
+        console.log(`[${username}] Moving to Ready to Ship tab...`);
+        try {
+            const readyTab = page.getByRole('tab', { name: /Ready to Ship/i }).or(page.getByText('Ready to Ship', { exact: true }).first());
+            await clickWithRetry(page, readyTab, 'Ready to Ship Tab');
+            await page.waitForTimeout(3000);
+            await nukePopups(page);
+
+            // --- FILTER: Label Downloaded = No ---
+            try {
+                console.log(`[${username}] Applying filter: Label Downloaded -> No`);
+                
+                // Find the dropdown containing "Label downloaded"
+                const labelDropdown = page.getByText('Label downloaded', { exact: false }).last();
+                await clickWithRetry(page, labelDropdown, 'Label Downloaded Dropdown');
+                await page.waitForTimeout(1000); // Wait for dropdown to open
+                
+                // Click the "No" option
+                const noOption = page.getByText('No', { exact: true }).last();
+                await noOption.waitFor({ state: 'visible', timeout: 3000 });
+                await noOption.click({ force: true });
+                
+                // Wait for the table to reload with the filtered data
+                console.log(`[${username}] Waiting 3 seconds for filtered results to load...`);
+                await page.waitForTimeout(3000);
+                
+                // Close the dropdown if it didn't auto-close (by clicking the header again or clicking elsewhere)
+                // Sometimes clicking away is safer
+                await page.mouse.click(10, 10);
+                await page.waitForTimeout(1000);
+            } catch (e) {
+                console.log(`[${username}] Failed to apply filter 'Label Downloaded -> No': ${e.message}`);
+            }
+
+            // Select all ready to ship orders
+            const selectAllReady = page.locator('input[type="checkbox"]').first();
+            try {
+                // Wait up to 10 seconds for the table to fully render
+                await selectAllReady.waitFor({ state: 'visible', timeout: 10000 });
+                console.log(`[${username}] Selecting all ready to ship orders...`);
+                await selectAllReady.check({ force: true });
+                await page.waitForTimeout(1000);
+            } catch (e) {
+                console.log(`[${username}] 'Select All' checkbox not visible or timed out.`);
+            }
+
+            // Click the main bottom Label button
+            const generateLabelBtn = page.getByRole('button', { name: 'Label', exact: true }).last()
+                .or(page.locator('button:has-text("Label")').last());
 
             try {
-                // REFRESH PAGE before starting a new file
-                if (i > 0) {
-                    console.log(`[${username}] Resetting to Dashboard for next file...`);
-                    try {
-                        // Use goto LOGIN_URL instead of reload() for better stability
-                        await page.goto(LOGIN_URL, { timeout: 20000 });
-                        await page.waitForLoadState('networkidle', { timeout: 5000 });
-                    } catch (e) {
-                        console.log(`[${username}] Navigation timed out. Continuing anyway...`);
+                // Wait for the label button to ensure table is ready
+                await generateLabelBtn.waitFor({ state: 'visible', timeout: 5000 });
+                console.log(`[${username}] Found main 'Label' button. Clicking...`);
+                await clickWithRetry(page, generateLabelBtn, 'Generate Labels Button');
+
+                // Wait for popup dialog
+                console.log(`[${username}] Waiting for popup to generate labels...`);
+                const popupDialog = page.getByRole('dialog').first();
+                await popupDialog.waitFor({ state: 'visible', timeout: 15000 });
+
+                // Now wait for the actual inner "Label" button to appear (meaning progress bar is done) OR an error
+                console.log(`[${username}] Waiting for progress bar to finish...`);
+                const innerLabelBtn = popupDialog.locator('button:has-text("Label")').first()
+                    .or(popupDialog.getByRole('button', { name: 'Label', exact: true }).first());
+                const errorText = popupDialog.getByText('Temporary Issue', { exact: false });
+                
+                const targetLocator = innerLabelBtn.or(errorText);
+                await targetLocator.waitFor({ state: 'visible', timeout: 60000 });
+
+                if (await errorText.isVisible()) {
+                    console.log(`[${username}] WARNING: Temporary Issue with Label Generation detected! Clicking 'Got it'...`);
+                    const gotItBtn = popupDialog.getByRole('button', { name: 'Got it', exact: true }).or(popupDialog.locator('button:has-text("Got it")'));
+                    if (await gotItBtn.isVisible()) {
+                        await gotItBtn.click({ force: true });
+                        await page.waitForTimeout(1000);
                     }
-                    await clearDashboard(page); // Clear ads again after reload
+                    
+                    console.log(`[${username}] Process ends here for this account due to temporary issue.`);
+                    return { username, labelDownloaded: false, infoMessage: "Temporary Issue - some orders not downloaded" };
                 }
 
-                // Step A: Catalog Uploads -> Verify 'Add Catalog in Bulk' appears
-                console.log(`[${username}] Looking for 'Catalog Uploads'...`);
-                const addCatalogBtn = page.getByRole('button', { name: 'Add Catalog in Bulk' });
-                await clickWithRetry(page, page.getByText('Catalog Uploads'), 'Catalog Uploads', addCatalogBtn);
+                console.log(`[${username}] Labels generated successfully!`);
 
-                // Step B: Add Catalog in Bulk -> Verify 'Women Fashion' appears
-                console.log(`[${username}] Looking for 'Add Catalog in Bulk'...`);
-                const womenFashionBtn = page.getByText('Women Fashion', { exact: true });
-                await clickWithRetry(page, addCatalogBtn, 'Add Catalog in Bulk', womenFashionBtn);
-
-                // Step C: Women Fashion -> Verify 'Accessories' appears
-                console.log(`[${username}] Looking for 'Women Fashion'...`);
-                const accessoriesBtn = page.getByText('Accessories', { exact: true });
-                await clickWithRetry(page, womenFashionBtn, 'Women Fashion', accessoriesBtn);
-
-                // Step D: Accessories -> Verify 'Hair Accessories' appears
-                console.log(`[${username}] Looking for 'Accessories'...`);
-                const hairAccessoriesCategoryBtn = page.getByText('Hair Accessories', { exact: true }).first();
-                await clickWithRetry(page, accessoriesBtn, 'Accessories', hairAccessoriesCategoryBtn);
-
-                // Step E: Hair Accessories Category -> Verify 'Hair Accessories' Subcategory appears
-                console.log(`[${username}] Looking for 'Hair Accessories Category'...`);
-                // Using .last() as it will be the second 'Hair Accessories' to appear in the column to the right
-                const hairAccessoriesSubcategoryBtn = page.getByText('Hair Accessories', { exact: true }).last();
-                await clickWithRetry(page, hairAccessoriesCategoryBtn, 'Hair Accessories Category', hairAccessoriesSubcategoryBtn);
-
-                // Step F: Hair Accessories Subcategory -> Verify 'Choose File' appears
-                console.log(`[${username}] Looking for 'Hair Accessories Subcategory'...`);
-                const chooseFileWait = page.getByRole('button', { name: 'Choose File' }).or(page.getByText('Upload Template File', { exact: true }));
-                await clickWithRetry(page, hairAccessoriesSubcategoryBtn, 'Hair Accessories Subcategory', chooseFileWait);
-
-                // Step G: Choose File
-                console.log(`[${username}] Looking for 'Choose File'...`);
-                await clickWithRetry(page, chooseFileWait, 'Choose File');
-
-                try {
-                    await page.locator('input[type="file"]').first().setInputFiles(currentFile);
-                } catch (e) {
-                    await chooseFileWait.setInputFiles(currentFile);
-                }
-                console.log(`[${username}] File selected: ${fileName}`);
-                await randomDelay(page); // Keep a small delay here for file to attach
-
-                // Step H: Click Upload/Submit
-                console.log(`[${username}] Looking for final 'Upload' button...`);
-                const submitBtn = page.getByRole('button', { name: /upload/i })
-                    .or(page.getByRole('button', { name: /submit/i }))
-                    .or(page.getByText('Upload', { exact: true }));
-
-                if (await submitBtn.count() > 0) {
-                    const buttons = await submitBtn.all();
-                    for (const btn of buttons) {
-                        if (await btn.isVisible()) {
-                            const text = await btn.innerText();
-                            if (text.toLowerCase().includes('catalog upload')) continue;
-
-                            console.log(`[${username}] Found button: ${text}. Clicking...`);
-                            await nukePopups(page); // Nuke one last time before clicking upload
-                            await clickWithRetry(page, btn, text);
-                            break;
-                        }
+                // Uncheck manifest
+                const manifestCheckbox = popupDialog.locator('input[type="checkbox"]').first();
+                if (await manifestCheckbox.isVisible()) {
+                    const isChecked = await manifestCheckbox.isChecked();
+                    if (isChecked) {
+                        console.log(`[${username}] Unchecking 'Download Manifest'...`);
+                        await manifestCheckbox.uncheck({ force: true });
+                        await page.waitForTimeout(500);
                     }
                 }
 
-                console.log(`[${username}] Upload finished for ${fileName}. Waiting 10 seconds...`);
-                await page.waitForTimeout(30000); // Reduced to 10s
+                // Click final download button
+                console.log(`[${username}] Clicking final Label download button...`);
+                const downloadPromise = page.waitForEvent('download', { timeout: 30000 });
 
-                fileResults.push({ file: fileName, status: 'Success' });
+                // Click directly to avoid locator.first() compilation bugs inside clickWithRetry
+                await innerLabelBtn.click({ force: true });
+
+                const download = await downloadPromise;
+                const prefix = username.split('@')[0] || 'account';
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                const downloadPath = path.join(DOWNLOAD_PATH, `${prefix}_labels_${ts}.pdf`);
+
+                await download.saveAs(downloadPath);
+                console.log(`[${username}] SUCCESS: Labels downloaded to ${downloadPath}`);
+                labelDownloaded = true;
 
             } catch (e) {
-                console.error(`[${username}] Failed to upload ${fileName}: ${e.message}`);
-                fileResults.push({ file: fileName, status: 'Failed', reason: e.message });
-                // Attempt to take a screenshot of the failure
-                try {
-                    await page.screenshot({ path: `error_${username}_${fileName}.png`, timeout: 5000 });
-                } catch (err) {
-                    console.log("error for gaurav 303", err)
-                }
+                console.log(`[${username}] Expected UI flow for 'Label' generation failed or no ready to ship orders: ${e.message}`);
             }
+
+        } catch (e) {
+            console.log(`[${username}] Expected flow for Ready to Ship not completed: ${e.message}`);
         }
+
 
     } catch (e) {
         console.error(`Error with account ${username}:`, e.message);
         globalError = e.message;
         try {
-            await page.screenshot({ path: `error_${username}_global.png`, timeout: 5000 });
+            await page.screenshot({ path: `error_orders_${username.split('@')[0]}.png`, timeout: 5000 });
         } catch (err) {
-            console.log("error for gaurav at 312", err)
+            console.log("error for screenshot", err)
         }
     } finally {
         console.log(`[${username}] Closing session...`);
@@ -468,19 +570,18 @@ async function processAccount(browser, account, uploadFiles) {
             await context.close();
         } catch (e) { }
     }
-    return { username, fileResults, globalError };
+    return { username, labelDownloaded, globalError };
 }
 
 async function runBot() {
     const accounts = getAccounts();
-    const uploadFiles = getUploadFiles();
 
-    if (uploadFiles.length === 0) {
-        console.error(`Error: No files found at ${FILE_PATH}`);
+    if (accounts.length === 0) {
+        console.error(`Error: No accounts loaded.`);
         return;
     }
-    console.log(`Found ${uploadFiles.length} files to upload.`);
     console.log(`Loaded ${accounts.length} accounts.`);
+    console.log(`Labels will be saved to: ${DOWNLOAD_PATH}`);
 
     const browser = await chromium.launch({
         headless: false,
@@ -496,39 +597,36 @@ async function runBot() {
 
     const results = [];
 
-    // Batch Processing
-    const BATCH_SIZE = 1; // Keep at 2 for stability
-    for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
-        const batch = accounts.slice(i, i + BATCH_SIZE);
-        console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
+    // Processing accounts one by one
+    for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
 
-        const batchResults = await Promise.all(batch.map(account => processAccount(browser, account, uploadFiles)));
-        results.push(...batchResults);
+        const result = await processAccount(browser, account);
+        results.push(result);
 
-        console.log("Batch complete. Waiting 5 seconds...");
-        await new Promise(r => setTimeout(r, 5000));
+        if (i < accounts.length - 1) {
+            console.log("Waiting 5 seconds before next account...");
+            await new Promise(r => setTimeout(r, 5000));
+        }
     }
 
     console.log("\nAll accounts processed.");
 
-    // --- FINAL SUMMARY (Moved BEFORE browser.close to ensure it prints) ---
+    // --- FINAL SUMMARY ---
     console.log("\n==========================================");
-    console.log("           EXECUTION SUMMARY              ");
+    console.log("       ORDER PROCESSING SUMMARY           ");
     console.log("==========================================");
 
     results.forEach(r => {
         console.log(`\nACCOUNT: ${r.username}`);
         if (r.globalError) {
-            console.log(`  STATUS: Session Failed - ${r.globalError}`);
-        }
-
-        if (r.fileResults && r.fileResults.length > 0) {
-            r.fileResults.forEach(f => {
-                const statusStr = f.status === 'Success' ? '✅ Success' : '❌ Failed';
-                console.log(`  ${statusStr.padEnd(12)} : ${f.file} ${f.status === 'Failed' ? `(${f.reason})` : ''}`);
-            });
-        } else if (!r.globalError) {
-            console.log(`  STATUS: No files processed.`);
+            console.log(`  STATUS: ❌ Session Failed - ${r.globalError}`);
+        } else if (r.infoMessage) {
+            console.log(`  STATUS: ℹ️ Information - ${r.infoMessage}`);
+        } else if (r.labelDownloaded) {
+            console.log(`  STATUS: ✅ Labels Downloaded Successfully`);
+        } else {
+            console.log(`  STATUS: ⚠️ Evaluated, but no labels were downloaded (no orders?)`);
         }
     });
     console.log("\n==========================================\n");

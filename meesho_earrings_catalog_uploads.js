@@ -5,7 +5,6 @@ const path = require('path');
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 // UPDATE THIS TO YOUR FOLDER PATH
-// const FILE_PATH = String.raw`c:\Users\ASUS\Downloads\pratik`;
 const FILE_PATH = String.raw`C:\meesho-bulk-management\uploaded-files`;
 
 // Helper to read accounts
@@ -388,31 +387,26 @@ async function processAccount(browser, account, uploadFiles) {
                 const accessoriesBtn = page.getByText('Accessories', { exact: true });
                 await clickWithRetry(page, womenFashionBtn, 'Women Fashion', accessoriesBtn);
 
-                // Step D: Accessories -> Verify 'Hair Accessories' appears
+                // Step D: Accessories -> Verify 'Jewellery' appears
                 console.log(`[${username}] Looking for 'Accessories'...`);
-                const hairAccessoriesCategoryBtn = page.getByText('Hair Accessories', { exact: true }).first();
-                await clickWithRetry(page, accessoriesBtn, 'Accessories', hairAccessoriesCategoryBtn);
+                const jewelleryBtn = page.getByText('Jewellery', { exact: true });
+                await clickWithRetry(page, accessoriesBtn, 'Accessories', jewelleryBtn);
 
-                // Step E: Hair Accessories Category -> Verify 'Hair Accessories' Subcategory appears
-                console.log(`[${username}] Looking for 'Hair Accessories Category'...`);
-                // Using .last() as it will be the second 'Hair Accessories' to appear in the column to the right
-                const hairAccessoriesSubcategoryBtn = page.getByText('Hair Accessories', { exact: true }).last();
-                await clickWithRetry(page, hairAccessoriesCategoryBtn, 'Hair Accessories Category', hairAccessoriesSubcategoryBtn);
+                // Step E: Jewellery -> Verify 'Earrings & Studs' appears
+                console.log(`[${username}] Looking for 'Jewellery'...`);
+                const earringsBtn = page.getByText('Earrings & Studs', { exact: true });
+                await clickWithRetry(page, jewelleryBtn, 'Jewellery', earringsBtn);
 
-                // Step F: Hair Accessories Subcategory -> Verify 'Choose File' appears
-                console.log(`[${username}] Looking for 'Hair Accessories Subcategory'...`);
-                const chooseFileWait = page.getByRole('button', { name: 'Choose File' }).or(page.getByText('Upload Template File', { exact: true }));
-                await clickWithRetry(page, hairAccessoriesSubcategoryBtn, 'Hair Accessories Subcategory', chooseFileWait);
+                // Step F: Earrings & Studs -> Verify 'Choose File' appears
+                console.log(`[${username}] Looking for 'Earrings & Studs'...`);
+                const chooseFileBtn = page.getByRole('button', { name: 'Choose File' });
+                await clickWithRetry(page, earringsBtn, 'Earrings & Studs', chooseFileBtn);
 
                 // Step G: Choose File
                 console.log(`[${username}] Looking for 'Choose File'...`);
-                await clickWithRetry(page, chooseFileWait, 'Choose File');
+                await clickWithRetry(page, chooseFileBtn, 'Choose File');
 
-                try {
-                    await page.locator('input[type="file"]').first().setInputFiles(currentFile);
-                } catch (e) {
-                    await chooseFileWait.setInputFiles(currentFile);
-                }
+                await chooseFileBtn.setInputFiles(currentFile);
                 console.log(`[${username}] File selected: ${fileName}`);
                 await randomDelay(page); // Keep a small delay here for file to attach
 
