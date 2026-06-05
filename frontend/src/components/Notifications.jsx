@@ -1,0 +1,133 @@
+import { useState, useEffect } from 'react';
+import { Trash2, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+
+function Notifications() {
+  const [errors, setErrors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState(null);
+
+  const fetchErrors = () => {
+    fetch('http://localhost:3001/api/errors')
+      .then(res => res.json())
+      .then(data => {
+        setErrors(data || []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching notifications:", err);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchErrors();
+    const interval = setInterval(fetchErrors, 5000); // Poll every 5s
+    return () => clearInterval(interval);
+  }, []);
+
+  const clearAll = async () => {
+    if (!window.confirm("Are you sure you want to clear all error notifications?")) return;
+    try {
+      const res = await fetch('http://localhost:3001/api/errors', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) setErrors([]);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to clear errors");
+    }
+  };
+
+  if (loading) return <div className="glass-panel">Loading notifications...</div>;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertTriangle color="var(--danger)" />
+          Error Notifications
+          {errors.length > 0 && <span style={{ background: 'var(--danger)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.9rem' }}>{errors.length}</span>}
+        </h2>
+        {errors.length > 0 && (
+          <button className="btn btn-danger" onClick={clearAll} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Trash2 size={16} /> Clear All
+          </button>
+        )}
+      </div>
+
+      {errors.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+          <AlertTriangle size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+          <h3>No errors found!</h3>
+          <p>Your bots are running smoothly.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {errors.map((err, idx) => (
+            <div key={idx} className="glass-panel" style={{ borderLeft: '4px solid var(--danger)', display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{err.bot}</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    {new Date(err.timestamp).toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                    Account: <strong>{err.account}</strong>
+                  </span>
+                  {err.sku && (
+                    <span style={{ background: 'rgba(255,165,0,0.1)', color: 'orange', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '600' }}>
+                      SKU: {err.sku}
+                    </span>
+                  )}
+                </div>
+                <p style={{ color: 'var(--text-color)', background: 'rgba(255,50,50,0.1)', padding: '10px', borderRadius: '6px', fontSize: '0.95rem' }}>
+                  {err.message}
+                </p>
+              </div>
+              
+              {err.screenshot && (
+                <div 
+                  style={{ width: '150px', height: '100px', cursor: 'pointer', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' }}
+                  onClick={() => setSelectedImage(`http://localhost:3001/error_screenshots/${err.screenshot}`)}
+                >
+                  <img 
+                    src={`http://localhost:3001/error_screenshots/${err.screenshot}`} 
+                    alt="Error Screenshot" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.75rem', textAlign: 'center', padding: '2px' }}>
+                    Click to Enlarge
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div 
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '2rem' }}
+          onClick={() => setSelectedImage(null)}
+        >
+          <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%' }}>
+            <img src={selectedImage} alt="Full Error Screenshot" style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', border: '2px solid var(--border-color)', borderRadius: '8px' }} />
+            <a 
+              href={selectedImage} 
+              target="_blank" 
+              rel="noreferrer"
+              style={{ position: 'absolute', top: '-40px', right: '0', color: 'white', display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none', background: 'var(--primary)', padding: '6px 12px', borderRadius: '4px' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <ExternalLink size={16} /> Open in New Tab
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default Notifications;

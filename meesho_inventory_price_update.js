@@ -10,16 +10,17 @@ const UPDATES_FILE = 'inventory_updates.csv';
 // Helper to read accounts
 function getAccounts() {
     try {
-        const csv = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
+        const csv = fs.readFileSync('accounts.csv', 'utf8');
         const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
         return lines.map(line => {
-            const [username, password] = line.split(',');
-            return { username, password };
-        });
+            const [username, password, name, isActive] = line.split(',');
+            return { username, password, name, isActive: isActive ? isActive.trim() === 'true' : true };
+        }).filter(acc => acc.isActive);
     } catch (e) {
         console.error("Error reading accounts.csv:", e.message);
         return [];
     }
+}
 }
 
 // Helper to read inventory updates

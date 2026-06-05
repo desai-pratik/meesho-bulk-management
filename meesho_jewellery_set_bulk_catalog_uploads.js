@@ -1,3 +1,4 @@
+const { logBotError } = require('./logger');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -14,9 +15,9 @@ function getAccounts() {
         const csv = fs.readFileSync('accounts.csv', 'utf8');
         const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
         return lines.map(line => {
-            const [username, password] = line.split(',');
-            return { username, password };
-        });
+            const [username, password, name, isActive] = line.split(',');
+            return { username, password, name, isActive: isActive ? isActive.trim() === 'true' : true };
+        }).filter(acc => acc.isActive);
     } catch (e) {
         console.error("Error reading accounts.csv:", e.message);
         return [];
@@ -48,7 +49,16 @@ async function randomDelay(page) {
 // SAFER NUCLEAR OPTION: Only remove actual modals/popups
 async function nukePopups(page) {
     try {
-        const result = await page.evaluate(() => {
+        return await page.evaluate(() => {
+            let actionTaken = false;
+            
+            // Check for specific actionable buttons before generic nuke
+            const proceedBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('Proceed to Upload'));
+            if (proceedBtn) {
+                proceedBtn.click();
+                return true;
+            }
+
             // Helper to check if an element is roughly in the center or covers the screen
             function isCentral(el) {
                 if (!el) return false;
@@ -312,20 +322,21 @@ async function processAccount(browser, account, uploadFiles) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
-    const context = await browser.newContext({
+    const sessionPath = require('path').join(__dirname, 'sessions', `${username}.json`);
+    let contextOptions = {
         viewport: null,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    });
+    };
+    if (require('fs').existsSync(sessionPath)) {
+        contextOptions.storageState = sessionPath;
+    }
+    const context = await browser.newContext(contextOptions);
 
     // Inject stealth scripts to look like a human
     await context.addInitScript(() => {
-        // Remove webdriver property
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        // Mock plugins to appear as a regular browser
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        // Mock languages
         Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        // Add fake chrome object
         window.chrome = { runtime: {} };
     });
 
@@ -335,20 +346,30 @@ async function processAccount(browser, account, uploadFiles) {
     let globalError = null;
 
     try {
-        // 1. Login
-        console.log(`[${username}] Navigating to login...`);
+        console.log(`[${username}] Navigating to Meesho...`);
         await page.goto(LOGIN_URL, { timeout: 30000 });
 
-        await page.getByRole('textbox', { name: 'Email Id or mobile number' }).fill(username);
-        await page.getByRole('textbox', { name: 'Password' }).fill(password);
-
-        console.log(`[${username}] Logging in...`);
-        await page.getByRole('button', { name: 'Log in' }).click();
-
-        // Wait for Dashboard
         try {
-            await page.waitForLoadState('networkidle', { timeout: 10000 });
-        } catch (e) { }
+            await Promise.race([
+                page.waitForSelector('input[name="emailOrMobile"]', { timeout: 30000 }),
+                page.getByText('Orders', { exact: true }).first().waitFor({ timeout: 30000 })
+            ]);
+        } catch (e) {
+            console.log(`[${username}] Warning: Timeout waiting for page to load.`);
+        }
+
+        const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
+        if (await emailInput.isVisible()) {
+            console.log(`[${username}] Not logged in. Logging in now...`);
+            await emailInput.fill(username);
+            await page.getByRole('textbox', { name: 'Password' }).fill(password);
+            await page.getByRole('button', { name: 'Log in' }).click();
+            try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
+            await context.storageState({ path: sessionPath });
+        } else {
+            console.log(`[${username}] Successfully used saved session! Skipping login.`);
+            await context.storageState({ path: sessionPath });
+        }
 
         // 2. Clear Dashboard Ads
         await clearDashboard(page);
@@ -442,7 +463,7 @@ async function processAccount(browser, account, uploadFiles) {
                 fileResults.push({ file: fileName, status: 'Failed', reason: e.message });
                 // Attempt to take a screenshot of the failure
                 try {
-                    await page.screenshot({ path: `error_${username}_${fileName}.png`, timeout: 5000 });
+                    await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
                 } catch (err) {
                     console.log("error for gaurav 303", err)
                 }
@@ -453,7 +474,7 @@ async function processAccount(browser, account, uploadFiles) {
         console.error(`Error with account ${username}:`, e.message);
         globalError = e.message;
         try {
-            await page.screenshot({ path: `error_${username}_global.png`, timeout: 5000 });
+            await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
         } catch (err) {
             console.log("error for gaurav at 312", err)
         }
@@ -500,8 +521,9 @@ async function runBot() {
         const batchResults = await Promise.all(batch.map(account => processAccount(browser, account, uploadFiles)));
         results.push(...batchResults);
 
-        console.log("Batch complete. Waiting 5 seconds...");
-        await new Promise(r => setTimeout(r, 5000));
+        console.log("Batch complete. Waiting 8-12 seconds to prevent rate-limiting...");
+        const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
+        await new Promise(r => setTimeout(r, delay));
     }
 
     console.log("\nAll accounts processed.");

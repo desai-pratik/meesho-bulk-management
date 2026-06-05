@@ -1,3 +1,4 @@
+const { logBotError } = require('./logger');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -17,9 +18,9 @@ function getAccounts() {
         const csv = fs.readFileSync('accounts.csv', 'utf8');
         const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
         return lines.map(line => {
-            const [username, password] = line.split(',');
-            return { username, password };
-        });
+            const [username, password, name, isActive] = line.split(',');
+            return { username, password, name, isActive: isActive ? isActive.trim() === 'true' : true };
+        }).filter(acc => acc.isActive);
     } catch (e) {
         console.error("Error reading accounts.csv:", e.message);
         return [];
@@ -560,7 +561,7 @@ async function processAccount(browser, account) {
         console.error(`Error with account ${username}:`, e.message);
         globalError = e.message;
         try {
-            await page.screenshot({ path: `error_orders_${username.split('@')[0]}.png`, timeout: 5000 });
+            await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
         } catch (err) {
             console.log("error for screenshot", err)
         }

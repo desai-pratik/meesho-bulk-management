@@ -1,0 +1,245 @@
+{
+  "cookies": [
+    {
+      "name": "SentryObservability",
+      "value": "0.89",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "browser_id",
+      "value": "NnIgKyAyMzMgKyAxaGN1MDFoY3Nvbw%3D%3D",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1782020968.514852,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "download_button",
+      "value": "true",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1783240622.548987,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "excel_updated",
+      "value": "true",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1783240622.549209,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "hidden_payment_banners",
+      "value": "%5B%5D",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1783240622.549376,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "mobile_search",
+      "value": "%5B%5D",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1783240622.549517,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "SocketMessages",
+      "value": "0.36",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "disable_barcoded_packets_tooltip",
+      "value": "5",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1813988977.477115,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_fbp",
+      "value": "fb.1.1779428977676.87311676179665917",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1788424626,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gcl_au",
+      "value": "1.1.1529306697.1779428978",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1787204978,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.1.1348343395.1779428978",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1815208626.640446,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "IDE",
+      "value": "AHWqTUk4P_uBiS-0mEPP3HqlJjqWGtqp0e6v0tIU5JGC86obFkYS7JPt4Oojrauq",
+      "domain": ".doubleclick.net",
+      "path": "/",
+      "expires": 1814941493.338776,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ak_bmsc",
+      "value": "FA9ACE9E01DDDEDE09D59E970DAC3A9F~000000000000000000000000000000~YAAQjIwsMa05+3KeAQAASXftlgBNpEr/CF26tm7mLepwD2frGn43pWt6z1oyf37ZefvpAabZivZSYhpGBoTmeXq1uWfDeO9otHhEGw4RzLtZYASIACZiHMg/Jcxv0ENaHpAcjAIZHzHZBLZDde70v/1W8DtAabOaPC0UKVfH9bRZnOJULaJkVyoJcSb0ZUPF/swrApWR0tlmzgxyXe1JXt1Ucbwpdu11fsoObFAX+x5/6d+iwcoMNVHCxPHwjZNEMaYzD1yTO0DpTIHYfFPagPHobR+7L1Uu+Xe+5Pi93a9qtm4rqixkminRy78dhYeK1wQL1h+cV6j6CbF0+DVK50y679QQksj5GcPNkYZIRhPBp78AQBqCp5Q4PhV38k1iKgQVOyq/GjjpvEaV3QxAGpBud7/ffwlYnJTQC2gtIkoCq9iPCQ==",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1780655805.706294,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "current_az_identifier",
+      "value": "ligiv",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "connect.sid",
+      "value": "s%3AwWHySeEWzvUFExCh_ozo35wpBd6EV2Ol.qsgm0DEp%2Brdnqt%2F48NZxMVu%2BM8tOQY%2FWMCzlFkDFeKk",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1780735022.541276,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "s_b",
+      "value": "true",
+      "domain": "supplier.meesho.com",
+      "path": "/",
+      "expires": 1780735022.548589,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "bm_sz",
+      "value": "E992898313A8512004ADDD50FDF28911~YAAQ14wsMZPFEnOeAQAAyLntlgCKQc9P7a6BysrYUizd0K+uDtRivBXEJNnw9qgSRbdF/Sw3cCvHa1R5uyu71OUhBvH/nyZc+ML6RhRzJzVDLmOoNkVySYEtRNYLKsJ6GimqCAJROt3rVgQJbmOZ2UeMPznovAuBXUZvy/wNGJaMQgxmOUE6OJHIT2HYqo0eGXbfRfAWor1UBF0bf15iDZ4AFKKFaCgWQ5A8RSjznnEVuiLL9eJamGri+AhneOR6BBKPAkQWEfIBja6kkljKDR/BgC7KB95R0h2ShOdVIoUbFCf2AwZHIb0rCFdYKTdb+82dWRJHMqV021JFS+guk/JLHWawDIv+4UHq1nAIagtwHeMmhHMdR9KyX/3m9bZGuLyskVsuleCECy+kIgu1mFkhNVTiWAgvyYSyMriSirSMpF8kJuIN+2f9RzTC2lwlFP2UH350HszJ9WvHcKZn~4277296~3228211",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1780663005.727505,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "mp_a66867feba42257f4b46689d52d48f86_mixpanel",
+      "value": "%7B%22distinct_id%22%3A%20%22ligiv%22%2C%22%24device_id%22%3A%20%2219e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e%22%2C%22%24initial_referrer%22%3A%20%22%24direct%22%2C%22%24initial_referring_domain%22%3A%20%22%24direct%22%2C%22%24user_id%22%3A%20%22ligiv%22%2C%22client_type%22%3A%20%22d-web%22%2C%22source%22%3A%20%22Direct%22%2C%22medium%22%3A%20%22Direct%22%2C%22campaign%22%3A%20%22Direct%22%2C%22initial_distinct_id%22%3A%20%22Direct%22%2C%22_fbp%22%3A%20%22fb.1.1779428977676.87311676179665917%22%2C%22_fbc%22%3A%20null%2C%22userAgent%22%3A%20%22Mozilla%2F5.0%20(Windows%20NT%2010.0%3B%20Win64%3B%20x64)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F143.0.0.0%20Safari%2F537.36%22%2C%22Supplier_id%22%3A%201405190%2C%22Supplier_tag%22%3A%20%22ligiv%22%2C%22M_Trusted%22%3A%20false%7D",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1812184626,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_abck",
+      "value": "352949BCD39AAE27853311C9C8DE9B02~-1~YAAQ14wsMfjFEnOeAQAA4L/tlhDr17aPMkneRuluDL3x74OQxyR3tnVJPDPW2zp/Seyv9wZDnXAtiRzBBFevOXI2sFU4FJbrHgWRACRyEXvlu5to7587hun26G1RABChhvoVWRvBDGDTzSRj8+rjOqCPgy/nRKFPr96XUGga/74damwNz7S/atVav/2GTpR66zu1TLnHPFhw5XsEGvWBf+rNuzwHMuzzFJypiinVHmGmt/JO6n9YMss22oTRpTQ707TcxGfXd9LxGo9mE6XQfu/MOFG6/M+y+X/rUoTdLfdeTzcQZI0uRCvfHvt9a8B9M5xSGNSQ02taYqfxFAJRSV62Q0in+apmtQpHBdWXy2U5I4dj0i3l1AFdDwsQdWZvgW0/zoikHxagNa8WcK1SlTyQ/Rp2ba8LCtHnWIr5okL8f4CDRMgBzkF/363hLwZdgw3IN5WyLsqP9wkMSXiSjiVNkrwTU8wFarMMi8CyiXOy+PAxj+50HLfOMphjzbie/ln96xo9HTF6TaDZyMaXD6FVkoWrc1V4XmwIaueDaAG8gsD7Z3baiuOGJp5/RzB3soqo8dIxm5SGKJ1C8JKOSGQycloZ5z6oNgMcc4Z4DKScy1/C4lctA6CL8rbraXwUNrZnxWn8+DhI1uQ=~-1~-1~1780652205~AAQAAAAF%2f%2f%2f%2f%2f2oAW+7eeZUIumGyI%2fsiquv+J8wMuR8WTFuXmrZ7YjzaVy2idKDRNSLPbg0BOfKlXbGrrhiXb9dQkabW6wIavjWWJH8V92eBEMLZ~-1",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1812184624.313522,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_K0EVP6J9VG",
+      "value": "GS2.1.s1780648626$o6$g0$t1780648626$j60$l0$h0",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1815208626.639168,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "bm_sv",
+      "value": "4D41DA32725EA11BE152E821A1E9BE21~YAAQ14wsMYfGEnOeAQAAwcntlgCxbRifCgg9HcEYA59D/ayufPI+u9+tfjflBWaBigHXNugAQs5bn4+QCrDKxsrYJugIBI3Fx/nR7lhJ+M742CMLJ/laPgUcvpceAuCnmrE3ULje5yN1KtaOgjSMqF7ULOyvpO9T+KSPtog4K5BRbLlwQll9WcUmKxzKiIcSAOd7xA9ujx12P5SjnnWxpXzYUV3PPK5tDHUYiFijcTfA2m/i4pUsqNMqYx3LMLU/OQ==~1",
+      "domain": ".meesho.com",
+      "path": "/",
+      "expires": 1780655806.815355,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://supplier.meesho.com",
+      "localStorage": [
+        {
+          "name": "__mpq_a66867feba42257f4b46689d52d48f86_pp",
+          "value": "[{\"id\":\"zkijak9xfjzngkds\",\"flushAfter\":1780648632015,\"payload\":{\"$set\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$browser_version\":143,\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"a66867feba42257f4b46689d52d48f86\",\"$distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$user_id\":\"ligiv\"}},{\"id\":\"s2aomd0k59ulgklt\",\"flushAfter\":1780648632016,\"payload\":{\"$set\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$browser_version\":143,\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"a66867feba42257f4b46689d52d48f86\",\"$distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$user_id\":\"ligiv\"}},{\"id\":\"2uf8j876b7u0rhcq\",\"flushAfter\":1780648632553,\"payload\":{\"$set\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$browser_version\":143,\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"a66867feba42257f4b46689d52d48f86\",\"$distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$user_id\":\"ligiv\"}},{\"id\":\"7x1szvc0q9mldivm\",\"flushAfter\":1780648632555,\"payload\":{\"$set\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$browser_version\":143,\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"a66867feba42257f4b46689d52d48f86\",\"$distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$user_id\":\"ligiv\"}},{\"id\":\"nogto7lznl2gc90x\",\"flushAfter\":1780648632559,\"payload\":{\"$set\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$browser_version\":143,\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"a66867feba42257f4b46689d52d48f86\",\"$distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$user_id\":\"ligiv\"}},{\"id\":\"qyt41y5u28gd5acw\",\"flushAfter\":1780648632560,\"payload\":{\"$set\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$browser_version\":143,\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\"},\"$token\":\"a66867feba42257f4b46689d52d48f86\",\"$distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$user_id\":\"ligiv\"}}]"
+        },
+        {
+          "name": "ak_a",
+          "value": "352949BCD39AAE27853311C9C8DE9B02"
+        },
+        {
+          "name": "__mpq_a66867feba42257f4b46689d52d48f86_ev",
+          "value": "[{\"id\":\"1l9avrpfv8n8ihwz\",\"flushAfter\":1780648632018,\"payload\":{\"event\":\"sp_login_page_email_phone_input\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"r201idkr58lj04fs\",\"time\":1780648622.018,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"status\":\"success\",\"email_or_phone\":\"zxrizcreation@gmail.com\",\"type\":\"email\",\"version\":\"v3.1\",\"container_client_version\":\"1.0.31\",\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"3u1045d8qkmvmuoj\",\"flushAfter\":1780648632018,\"payload\":{\"event\":\"sp_login_page_email_phone_input\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"1ts6yd31t9dtpvgk\",\"time\":1780648622.018,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"status\":\"success\",\"email_or_phone\":\"zxrizcreation@gmail.com\",\"type\":\"email\",\"version\":\"v3.1\",\"container_client_version\":\"1.0.31\",\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"iwkh0bjk667gj866\",\"flushAfter\":1780648632124,\"payload\":{\"event\":\"Webvital Score\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"jfjkimpd22njn2g1\",\"time\":1780648622.124,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"Event Name\":\"LCP\",\"Event Value\":420,\"Event Id\":\"v4-1780648607524-2045222245622\",\"Connection Type\":\"4g\",\"Browser URL\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"page_name\":\"ROOT_LOGIN\",\"Target Selector\":\"h1.Typography__xp501z0.Typography__xp501z1.Typography_heading-1__xp501z4\",\"event_id\":\"v4-1780648607524-2045222245622\",\"event_name\":\"LCP\",\"event_value\":420,\"target_selector\":\"h1.Typography__xp501z0.Typography__xp501z1.Typography_heading-1__xp501z4\",\"browser_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"connection_type\":\"4g\",\"created_at\":1780648622124,\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"vshaiqr24ke2k4rh\",\"flushAfter\":1780648632127,\"payload\":{\"event\":\"Webvital Score\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"g922y4frk9e4734o\",\"time\":1780648622.127,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"Event Name\":\"LCP\",\"Event Value\":420,\"Event Id\":\"v4-1780648607524-2045222245622\",\"Connection Type\":\"4g\",\"Browser URL\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"page_name\":\"ROOT_LOGIN\",\"Target Selector\":\"h1.Typography__xp501z0.Typography__xp501z1.Typography_heading-1__xp501z4\",\"event_id\":\"v4-1780648607524-2045222245622\",\"event_name\":\"LCP\",\"event_value\":420,\"target_selector\":\"h1.Typography__xp501z0.Typography__xp501z1.Typography_heading-1__xp501z4\",\"browser_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"connection_type\":\"4g\",\"created_at\":1780648622124,\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"gik1oh0qtd3fnl4u\",\"flushAfter\":1780648632557,\"payload\":{\"event\":\"sp_login_password_autofill\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"gmf0s8lbzo7ass7t\",\"time\":1780648622.557,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"autofilled\":true,\"version\":\"v3.1\",\"container_client_version\":\"1.0.31\",\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"y2kt1x7i33o2cnn0\",\"flushAfter\":1780648632558,\"payload\":{\"event\":\"sp_login_password_autofill\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"6myw1199gyz1eibw\",\"time\":1780648622.558,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"autofilled\":true,\"version\":\"v3.1\",\"container_client_version\":\"1.0.31\",\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"9jf6hmk9ilb01eqr\",\"flushAfter\":1780648632561,\"payload\":{\"event\":\"sp_login_page_login_button_clicked\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"hy84v5fcqkojstgi\",\"time\":1780648622.561,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"status\":\"success\",\"emailOrPhone\":\"zxrizcreation@gmail.com\",\"version\":\"v3.1\",\"container_client_version\":\"1.0.31\",\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"o5ymts0pyduvtn7z\",\"flushAfter\":1780648632561,\"payload\":{\"event\":\"sp_login_page_login_button_clicked\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"4dtp0mvobj1po5xc\",\"time\":1780648622.561,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"status\":\"success\",\"emailOrPhone\":\"zxrizcreation@gmail.com\",\"version\":\"v3.1\",\"container_client_version\":\"1.0.31\",\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"asxe939b9dphwx5o\",\"flushAfter\":1780648632744,\"payload\":{\"event\":\"Webvital Score\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"lp12tq6wf8gdbt79\",\"time\":1780648622.744,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"Event Name\":\"INP\",\"Event Value\":56,\"Event Id\":\"v4-1780648607524-8124303562701\",\"Connection Type\":\"4g\",\"Browser URL\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"page_name\":\"ROOT_LOGIN\",\"Target Selector\":\"button.Button__1neylnx0.Button_primary__1neylnx1.Button_l__1neylnx6.cvhb0ya\",\"event_id\":\"v4-1780648607524-8124303562701\",\"event_name\":\"INP\",\"event_value\":56,\"target_selector\":\"button.Button__1neylnx0.Button_primary__1neylnx1.Button_l__1neylnx6.cvhb0ya\",\"browser_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"connection_type\":\"4g\",\"created_at\":1780648622744,\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"ingae20f9w7i56d9\",\"flushAfter\":1780648632746,\"payload\":{\"event\":\"Webvital Score\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"lyazxguvkpwcjhyi\",\"time\":1780648622.746,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"Event Name\":\"INP\",\"Event Value\":56,\"Event Id\":\"v4-1780648607524-8124303562701\",\"Connection Type\":\"4g\",\"Browser URL\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"page_name\":\"ROOT_LOGIN\",\"Target Selector\":\"button.Button__1neylnx0.Button_primary__1neylnx1.Button_l__1neylnx6.cvhb0ya\",\"event_id\":\"v4-1780648607524-8124303562701\",\"event_name\":\"INP\",\"event_value\":56,\"target_selector\":\"button.Button__1neylnx0.Button_primary__1neylnx1.Button_l__1neylnx6.cvhb0ya\",\"browser_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"connection_type\":\"4g\",\"created_at\":1780648622744,\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"4e8qiz38hxe004qn\",\"flushAfter\":1780648632759,\"payload\":{\"event\":\"Webvital Score\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"hoomehc4h69um9uu\",\"time\":1780648622.759,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"Event Name\":\"CLS\",\"Event Value\":1,\"Event Id\":\"v4-1780648607524-7415844630743\",\"Connection Type\":\"4g\",\"Browser URL\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"page_name\":\"ROOT_LOGIN\",\"Target Selector\":\"#root>div.eo5rkv0._1fth4rh6._1fth4rh2n._1fth4rh2k._1fth4rh2i>div._1shs6u20._1fth4rh2n._1fth4rh2k\",\"event_id\":\"v4-1780648607524-7415844630743\",\"event_name\":\"CLS\",\"event_value\":0.000593895214154817,\"target_selector\":\"#root>div.eo5rkv0._1fth4rh6._1fth4rh2n._1fth4rh2k._1fth4rh2i>div._1shs6u20._1fth4rh2n._1fth4rh2k\",\"browser_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"connection_type\":\"4g\",\"created_at\":1780648622755,\"token\":\"a66867feba42257f4b46689d52d48f86\"}}},{\"id\":\"bgqsq1ppg7r8gcxq\",\"flushAfter\":1780648632765,\"payload\":{\"event\":\"Webvital Score\",\"properties\":{\"$os\":\"Windows\",\"$browser\":\"Chrome\",\"$referrer\":\"https://supplier.meesho.com/panel/v3/new/growth/ligiv/home\",\"$referring_domain\":\"supplier.meesho.com\",\"$current_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"$browser_version\":143,\"$screen_height\":1080,\"$screen_width\":1920,\"mp_lib\":\"web\",\"$lib_version\":\"2.45.0\",\"$insert_id\":\"q0n7acffxapnlate\",\"time\":1780648622.765,\"distinct_id\":\"ligiv\",\"$device_id\":\"19e4e3b486b15ba-038949ef3e19fc8-26001b51-1fa400-19e4e3b486c77e\",\"$initial_referrer\":\"$direct\",\"$initial_referring_domain\":\"$direct\",\"$user_id\":\"ligiv\",\"client_type\":\"d-web\",\"source\":\"Direct\",\"medium\":\"Direct\",\"campaign\":\"Direct\",\"initial_distinct_id\":\"Direct\",\"_fbp\":\"fb.1.1779428977676.87311676179665917\",\"_fbc\":null,\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\",\"Supplier_id\":1405190,\"Supplier_tag\":\"ligiv\",\"M_Trusted\":false,\"Event Name\":\"CLS\",\"Event Value\":1,\"Event Id\":\"v4-1780648607524-7415844630743\",\"Connection Type\":\"4g\",\"Browser URL\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"page_name\":\"ROOT_LOGIN\",\"Target Selector\":\"#root>div.eo5rkv0._1fth4rh6._1fth4rh2n._1fth4rh2k._1fth4rh2i>div._1shs6u20._1fth4rh2n._1fth4rh2k\",\"event_id\":\"v4-1780648607524-7415844630743\",\"event_name\":\"CLS\",\"event_value\":0.000593895214154817,\"target_selector\":\"#root>div.eo5rkv0._1fth4rh6._1fth4rh2n._1fth4rh2k._1fth4rh2i>div._1shs6u20._1fth4rh2n._1fth4rh2k\",\"browser_url\":\"https://supplier.meesho.com/panel/v3/new/root/login?redirect=%2Fpanel%2Fv3%2Fnew%2Fgrowth%2Fligiv%2Fhome\",\"connection_type\":\"4g\",\"created_at\":1780648622755,\"token\":\"a66867feba42257f4b46689d52d48f86\"}}}]"
+        },
+        {
+          "name": "ak_ax",
+          "value": "-1"
+        },
+        {
+          "name": "_gcl_ls",
+          "value": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"eopCount\":0,\"creationTimeMs\":1779428977937},\"expires\":1787204977937}}"
+        },
+        {
+          "name": "instanceId",
+          "value": "wr273h7JOWK0HSQfRluzd"
+        }
+      ]
+    }
+  ]
+}

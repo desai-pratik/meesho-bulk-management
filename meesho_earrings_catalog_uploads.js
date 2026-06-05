@@ -1,3 +1,4 @@
+const { logBotError } = require('./logger');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -13,13 +14,14 @@ function getAccounts() {
         const csv = fs.readFileSync('accounts.csv', 'utf8');
         const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
         return lines.map(line => {
-            const [username, password] = line.split(',');
-            return { username, password };
-        });
+            const [username, password, name, isActive] = line.split(',');
+            return { username, password, name, isActive: isActive ? isActive.trim() === 'true' : true };
+        }).filter(acc => acc.isActive);
     } catch (e) {
         console.error("Error reading accounts.csv:", e.message);
         return [];
     }
+}
 }
 
 // Helper to find files
@@ -441,7 +443,7 @@ async function processAccount(browser, account, uploadFiles) {
                 fileResults.push({ file: fileName, status: 'Failed', reason: e.message });
                 // Attempt to take a screenshot of the failure
                 try {
-                    await page.screenshot({ path: `error_${username}_${fileName}.png`, timeout: 5000 });
+                    await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
                 } catch (err) {
                     console.log("error for gaurav 303", err)
                 }
@@ -452,7 +454,7 @@ async function processAccount(browser, account, uploadFiles) {
         console.error(`Error with account ${username}:`, e.message);
         globalError = e.message;
         try {
-            await page.screenshot({ path: `error_${username}_global.png`, timeout: 5000 });
+            await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
         } catch (err) {
             console.log("error for gaurav at 312", err)
         }
