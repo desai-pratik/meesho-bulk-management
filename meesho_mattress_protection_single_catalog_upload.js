@@ -113,19 +113,20 @@ async function clickWithRetry(page, locator, name) {
     throw new Error(`Failed to click ${name}`);
 }
 
-async function fillField(page, name, value, isDropdown=false) {
+async function fillField(page, name, value, isDropdown=false, sectionHeader=null) {
     if (!value) return;
     try {
         console.log(`  > Filling ${name} with ${value}...`);
         
         if (isDropdown) {
             // Use starts-with to handle ' *' and ' (N)' suffixes, but exclude the 'Length Size (INCH)' table header
+            const prefix = sectionHeader ? `//*[normalize-space(.)='${sectionHeader}']/following::` : `//`;
             const xpathNameMatch = `starts-with(normalize-space(.), '${name}') and not(contains(normalize-space(.), 'Size (INCH)'))`;
             const patterns = [
-                `//span[${xpathNameMatch}]/parent::div/following-sibling::div//input`,
-                `//p[${xpathNameMatch}]/parent::div/following-sibling::div//input`,
-                `//label[${xpathNameMatch}]/following-sibling::div//input`,
-                `//*[${xpathNameMatch}]/ancestor::div[1]/following-sibling::div//input`
+                `${prefix}span[${xpathNameMatch}]/parent::div/following-sibling::div//input`,
+                `${prefix}p[${xpathNameMatch}]/parent::div/following-sibling::div//input`,
+                `${prefix}label[${xpathNameMatch}]/following-sibling::div//input`,
+                `${prefix}*[${xpathNameMatch}]/ancestor::div[1]/following-sibling::div//input`
             ];
             
             let container;
@@ -224,20 +225,24 @@ async function fillField(page, name, value, isDropdown=false) {
             }
         } else {
             // Normal text input
-            let input = page.getByPlaceholder(new RegExp(name, 'i')).first();
+            let input = null;
+            if (!sectionHeader) {
+                input = page.getByPlaceholder(new RegExp(name, 'i')).first();
+            }
             
             // Xpath fallback (especially for table inputs without placeholders)
-            if (!(await input.isVisible().catch(() => false))) {
+            if (!input || !(await input.isVisible().catch(() => false))) {
                 const lowerName = name.toLowerCase();
                 const translateFn = `translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')`;
+                const prefix = sectionHeader ? `//*[normalize-space(.)='${sectionHeader}']/following::` : `//`;
                 const patterns = [
-                    `//span[contains(${translateFn}, '${lowerName}')]/parent::div/following-sibling::div//*[self::input or self::textarea]`,
-                    `//p[contains(${translateFn}, '${lowerName}')]/parent::div/following-sibling::div//*[self::input or self::textarea]`,
-                    `//label[contains(${translateFn}, '${lowerName}')]/following-sibling::div//*[self::input or self::textarea]`,
-                    `//*[contains(${translateFn}, '${lowerName}')]/ancestor::div[1]/following-sibling::div//*[self::input or self::textarea]`,
-                    `//*[contains(${translateFn}, '${lowerName}')]/ancestor::*[1]/following-sibling::*//*[self::input or self::textarea]`,
-                    `//th[contains(${translateFn}, '${lowerName}')]/ancestor::table//*[self::input or self::textarea]`, // for table inputs
-                    `//div[contains(${translateFn}, '${lowerName}')]/following-sibling::div//*[self::input or self::textarea]` // grid layout tables
+                    `${prefix}span[contains(${translateFn}, '${lowerName}')]/parent::div/following-sibling::div//*[self::input or self::textarea]`,
+                    `${prefix}p[contains(${translateFn}, '${lowerName}')]/parent::div/following-sibling::div//*[self::input or self::textarea]`,
+                    `${prefix}label[contains(${translateFn}, '${lowerName}')]/following-sibling::div//*[self::input or self::textarea]`,
+                    `${prefix}*[contains(${translateFn}, '${lowerName}')]/ancestor::div[1]/following-sibling::div//*[self::input or self::textarea]`,
+                    `${prefix}*[contains(${translateFn}, '${lowerName}')]/ancestor::*[1]/following-sibling::*//*[self::input or self::textarea]`,
+                    `${prefix}th[contains(${translateFn}, '${lowerName}')]/ancestor::table//*[self::input or self::textarea]`, // for table inputs
+                    `${prefix}div[contains(${translateFn}, '${lowerName}')]/following-sibling::div//*[self::input or self::textarea]` // grid layout tables
                 ];
                 for (let p of patterns) {
                     const i = page.locator(p).first();
@@ -453,7 +458,7 @@ async function processAccount(browser, account, groups, defaults) {
             console.log(`  > Logging in...`);
             await emailInput.fill(username);
             await page.getByRole('textbox', { name: 'Password' }).fill(password);
-            await page.getByRole('button', { name: 'Log in' }).click();
+            await page.getByRole('button', { name: 'Log in', exact: true }).click();
             try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch(e) {}
             await context.storageState({ path: sessionPath });
         } else {
@@ -556,7 +561,7 @@ async function processAccount(browser, account, groups, defaults) {
                 await fillField(page, 'Product Name', defaults.productName, false);
                 
                 // Fill Size first to unlock pricing table!
-                await fillField(page, 'Size', defaults.size, true);
+                await fillField(page, 'Size', defaults.size, true, 'Product, Size and Inventory');
                 
                 // Now that Size is filled, pricing table appears
                 await page.waitForTimeout(3000); // Give it plenty of time to render the grid
@@ -590,7 +595,7 @@ async function processAccount(browser, account, groups, defaults) {
                 await fillField(page, 'Product Length', defaults.productLength, true);
                 await fillField(page, 'Product Unit', defaults.productDimensionUnit, true);
                 await fillField(page, 'Product Weight', defaults.productWeight, true);
-                await fillField(page, 'Size', defaults.sizing, true);
+                await fillField(page, 'Size', defaults.sizing, true, 'Product Details');
                 await fillField(page, 'Water Resistance Level', defaults.waterResistanceLevel, true);
                 await fillField(page, 'Weight Unit', defaults.weightUnit, true);
                 await fillField(page, 'COUNTRY OF ORIGIN', defaults.countryOfOrigin, true);

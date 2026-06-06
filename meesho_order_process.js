@@ -347,7 +347,7 @@ async function processAccount(browser, account) {
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
 
         console.log(`[${username}] Logging in...`);
-        await page.getByRole('button', { name: 'Log in' }).click();
+        await page.getByRole('button', { name: 'Log in', exact: true }).click();
 
         // Wait for Dashboard
         try {

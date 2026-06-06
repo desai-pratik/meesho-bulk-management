@@ -21,7 +21,6 @@ function getAccounts() {
         return [];
     }
 }
-}
 
 // Helper to read inventory stock updates
 function getInventoryUpdates() {
@@ -250,7 +249,7 @@ async function updateInventoryForAccount(browser, account, updates) {
         await page.goto(LOGIN_URL, { timeout: 30000 });
         await page.getByRole('textbox', { name: 'Email Id or mobile number' }).fill(username);
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
-        await page.getByRole('button', { name: 'Log in' }).click();
+        await page.getByRole('button', { name: 'Log in', exact: true }).click();
         
         try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
         await clearDashboard(page);

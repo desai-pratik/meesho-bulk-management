@@ -104,7 +104,7 @@ async function fetchReturnOTPs(browser, account) {
             console.log(`[${username}] Not logged in. Logging in now...`);
             await emailInput.fill(username);
             await page.getByRole('textbox', { name: 'Password' }).fill(password);
-            await page.getByRole('button', { name: 'Log in' }).click();
+            await page.getByRole('button', { name: 'Log in', exact: true }).click();
             try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
             await context.storageState({ path: sessionPath });
         } else {

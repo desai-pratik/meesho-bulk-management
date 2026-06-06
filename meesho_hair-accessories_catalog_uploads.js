@@ -23,7 +23,6 @@ function getAccounts() {
         return [];
     }
 }
-}
 
 // Helper to find files
 function getUploadFiles() {
@@ -345,7 +344,7 @@ async function processAccount(browser, account, uploadFiles) {
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
 
         console.log(`[${username}] Logging in...`);
-        await page.getByRole('button', { name: 'Log in' }).click();
+        await page.getByRole('button', { name: 'Log in', exact: true }).click();
 
         // Wait for Dashboard
         try {
