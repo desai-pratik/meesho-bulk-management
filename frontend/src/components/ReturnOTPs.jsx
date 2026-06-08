@@ -61,8 +61,8 @@ function ReturnOTPs({ scripts, onTrigger }) {
   };
 
   return (
-    <div className="glass-panel">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 85px)', overflow: 'hidden', paddingRight: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
         <h2 style={{ fontSize: '1.4rem' }}>Return OTPs</h2>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -100,9 +100,10 @@ function ReturnOTPs({ scripts, onTrigger }) {
       `}</style>
 
       {accounts.length > 0 ? (
-        <table className="accounts-table">
-          <thead>
-            <tr>
+        <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.5rem', paddingBottom: '1rem' }}>
+          <table className="accounts-table" style={{ marginTop: 0 }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-dark)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <tr>
               <th>Account</th>
               <th>Courier OTPs</th>
               <th>Last Updated</th>
@@ -180,6 +181,7 @@ function ReturnOTPs({ scripts, onTrigger }) {
               })}
           </tbody>
         </table>
+        </div>
       ) : (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
           No accounts found. Please add accounts in the Accounts tab first.

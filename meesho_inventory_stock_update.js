@@ -2,6 +2,19 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+const origLog = console.log;
+console.log = (...args) => {
+    const user = asyncLocalStorage.getStore();
+    if (user && typeof args[0] === 'string') {
+        if (args[0].match(/^\s*[>!]/)) {
+            args[0] = `[${user}] ` + args[0].trimStart();
+        }
+    }
+    origLog(...args);
+};
+
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const ACCOUNTS_FILE = 'accounts.csv';
@@ -397,7 +410,7 @@ async function runBot() {
     const allResults = {};
 
     for (const account of accounts) {
-        const results = await updateInventoryForAccount(browser, account, updates);
+        const results = await asyncLocalStorage.run(account.username, () => updateInventoryForAccount(browser, account, updates));
         allResults[account.username] = results;
     }
 

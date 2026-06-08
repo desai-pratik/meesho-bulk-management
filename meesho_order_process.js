@@ -3,6 +3,19 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+const origLog = console.log;
+console.log = (...args) => {
+    const user = asyncLocalStorage.getStore();
+    if (user && typeof args[0] === 'string') {
+        if (args[0].match(/^\s*[>!]/)) {
+            args[0] = `[${user}] ` + args[0].trimStart();
+        }
+    }
+    origLog(...args);
+};
+
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const DOWNLOAD_PATH = String.raw`C:\meesho-bulk-management\labels`;
@@ -609,7 +622,7 @@ async function runBot() {
     for (let i = 0; i < accounts.length; i++) {
         const account = accounts[i];
 
-        const result = await processAccount(browser, account);
+        const result = await asyncLocalStorage.run(account.username, () => processAccount(browser, account));
         results.push(result);
 
         if (i < accounts.length - 1) {
