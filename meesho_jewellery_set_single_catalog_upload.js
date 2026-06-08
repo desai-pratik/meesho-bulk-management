@@ -2,6 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const { logBotError } = require('./logger');
+const { nukePopups, clearDashboard } = require('./nuke_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -72,43 +73,7 @@ function getDefaults() {
     return {};
 }
 
-async function nukePopups(page) {
-    // Basic popup closer
-    try {
-        return await page.evaluate(() => {
-            let actionTaken = false;
-            
-            // Check for specific actionable buttons before generic nuke
-            const proceedBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('Proceed to Upload'));
-            if (proceedBtn) {
-                proceedBtn.click();
-                return true;
-            }
-            document.querySelectorAll('div[role="dialog"], .MuiModal-root, .MuiBackdrop-root, [class*="joyride"]').forEach(el => {
-                if (el.style.display !== 'none') {
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('pointer-events', 'none', 'important');
-                    actionTaken = true;
-                }
-            });
-            document.querySelectorAll('svg').forEach(svg => {
-                if ((svg.getAttribute('class') || '').toLowerCase().includes('close')) {
-                    try {
-                        const clickable = svg.closest('button') || svg;
-                        clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                        actionTaken = true;
-                    } catch (e) {}
-                }
-            });
-            return actionTaken;
-        });
-    } catch (e) { return false; }
-}
 
-async function clearDashboard(page) {
-    await page.waitForTimeout(3000);
-    for(let i=0; i<3; i++) { await nukePopups(page); await page.waitForTimeout(500); }
-}
 
 async function clickWithRetry(page, locator, name) {
     for (let i = 0; i < 5; i++) {

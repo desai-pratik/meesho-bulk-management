@@ -2,6 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const { logBotError } = require('./logger');
+const { nukePopups, clearDashboard } = require('./nuke_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -55,123 +56,7 @@ function getInventoryUpdates() {
     }
 }
 
-// SAFER NUCLEAR OPTION: Only remove actual modals/popups
-async function nukePopups(page) {
-    try {
-        const result = await page.evaluate(() => {
-            function isCentral(el) {
-                if (!el) return false;
-                const rect = el.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) return false;
-                const winW = window.innerWidth;
-                const cx = rect.left + rect.width / 2;
-                return (rect.width > winW * 0.8) || (cx > winW * 0.2 && cx < winW * 0.8);
-            }
 
-            let actionTaken = false;
-            const buttonsOrLinks = Array.from(document.querySelectorAll('button, a, span'));
-            for (const el of buttonsOrLinks) {
-                if (el.innerText && el.innerText.trim().toLowerCase() === 'proceed to upload') {
-                    const clickable = el.closest('button') || el;
-                    clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                    actionTaken = true;
-                }
-            }
-
-            const allDivs = Array.from(document.querySelectorAll('div, p, h4, h2'));
-            for (const el of allDivs) {
-                if (el.innerText && (
-                    el.innerText.includes('Notifications') ||
-                    el.innerText.includes('Losing') ||
-                    el.innerText.includes('Meesho Fast Program') ||
-                    (el.innerText.includes('Announcement') && !el.innerText.includes('mportant Announcements'))
-                )) {
-                    let parent = el.closest('div[role="presentation"], div[class*="MuiPaper"], div[role="dialog"]');
-                    if (!parent) {
-                        let current = el.parentElement;
-                        while (current && current.tagName !== 'BODY') {
-                            const style = window.getComputedStyle(current);
-                            if (style.position === 'fixed' || parseInt(style.zIndex || 0) > 100) {
-                                parent = current;
-                                break;
-                            }
-                            current = current.parentElement;
-                        }
-                    }
-                    if (parent && parent.tagName !== 'BODY' && parent.id !== 'root' && isCentral(parent)) {
-                        if (parent.style.display !== 'none') {
-                            parent.style.setProperty('display', 'none', 'important');
-                            actionTaken = true;
-                        }
-                    }
-                }
-            }
-
-            const selectors = [
-                'div[role="dialog"]',
-                '.MuiModal-root',
-                '.MuiBackdrop-root',
-                '[class*="backdrop"]',
-                '[class*="joyride"]',
-                '[class*="tour"]',
-                '[class*="guide"]'
-            ];
-            document.querySelectorAll(selectors.join(', ')).forEach(el => {
-                if (isCentral(el)) {
-                    if (el.style.display !== 'none') {
-                        el.style.setProperty('display', 'none', 'important');
-                        el.style.setProperty('pointer-events', 'none', 'important');
-                        actionTaken = true;
-                    }
-                }
-            });
-
-            document.querySelectorAll('svg').forEach(svg => {
-                const path = svg.querySelector('path');
-                if ((svg.getAttribute('class') || '').toLowerCase().includes('close') ||
-                    (path && path.getAttribute('d') && path.getAttribute('d').length < 200 && path.getAttribute('d').includes('M'))) {
-                    let isPopup = false;
-                    let curr = svg;
-                    let popupContainer = null;
-                    while (curr && curr.tagName !== 'BODY') {
-                        const style = window.getComputedStyle(curr);
-                        if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex || 0) > 10) {
-                            if (style.display !== 'none') {
-                                isPopup = true;
-                                popupContainer = curr;
-                            }
-                            break;
-                        }
-                        curr = curr.parentElement;
-                    }
-                    if (isPopup && isCentral(popupContainer)) {
-                        try {
-                            const clickable = svg.closest('button') || svg;
-                            clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                            actionTaken = true;
-                        } catch (e) { }
-                    }
-                }
-            });
-            return { actionTaken: actionTaken };
-        });
-        return result;
-    } catch (e) {
-        return { actionTaken: false };
-    }
-}
-
-async function clearDashboard(page) {
-    await page.waitForTimeout(1000);
-    for (let i = 0; i < 4; i++) {
-        const nukeResult = await nukePopups(page);
-        if (nukeResult && nukeResult.actionTaken) {
-            await page.waitForTimeout(500);
-        } else {
-            break;
-        }
-    }
-}
 
 async function handleErrorPage(page) {
     try {

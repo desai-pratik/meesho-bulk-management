@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { nukePopups, clearDashboard } = require('./nuke_helper');
 const fs = require('fs');
 const path = require('path');
 
@@ -126,37 +127,8 @@ async function fetchAccountStats(browser, account) {
         // Wait a bit for the dashboard data to populate
         await page.waitForTimeout(3000);
 
-        console.log(`[${username}] Closing any popups...`);
-        await page.evaluate(() => {
-            const winW = window.innerWidth;
-            
-            // 1. Try to click close buttons (SVGs) ONLY in central popups (avoiding sidebars)
-            document.querySelectorAll('svg').forEach(svg => {
-                const rect = svg.getBoundingClientRect();
-                const cx = rect.left + rect.width / 2;
-                
-                if (rect.width > 0 && rect.height > 0 && cx > winW * 0.2 && cx < winW * 0.8) {
-                    let parent = svg;
-                    while (parent && parent.tagName !== 'BODY') {
-                        const style = window.getComputedStyle(parent);
-                        if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex || 0) > 10) {
-                            try { svg.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e){}
-                            return;
-                        }
-                        parent = parent.parentElement;
-                    }
-                }
-            });
-            
-            // 2. Hide common modal/backdrop containers
-            document.querySelectorAll('div[role="dialog"], [class*="modal"], [class*="backdrop"]').forEach(div => {
-                const style = window.getComputedStyle(div);
-                if (style.position === 'fixed' || style.position === 'absolute') {
-                    div.style.setProperty('display', 'none', 'important');
-                }
-            });
-        });
-        await page.waitForTimeout(1000);
+        // Close any popups that might intercept clicks
+        await clearDashboard(page);
 
         console.log(`[${username}] Extracting Pending Orders from Dashboard...`);
         const count = await page.evaluate(() => {

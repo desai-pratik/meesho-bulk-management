@@ -1,4 +1,5 @@
 const { logBotError } = require('./logger');
+const { nukePopups, clearDashboard } = require('./nuke_helper');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -58,133 +59,7 @@ async function randomDelay(page) {
     await page.waitForTimeout(2000)//s just for stability
 }
 
-// SAFER NUCLEAR OPTION: Only remove actual modals/popups
-async function nukePopups(page) {
-    try {
-        const result = await page.evaluate(() => {
-            // Helper to check if an element is roughly in the center or covers the screen
-            function isCentral(el) {
-                if (!el) return false;
-                const rect = el.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) return false;
 
-                const winW = window.innerWidth;
-                const cx = rect.left + rect.width / 2;
-
-                // Consider it a popup if:
-                // 1. It covers more than 80% width of the screen (backdrops) OR
-                // 2. Its center X is between 20% and 80% of the screen (avoids left/right sidebars entirely)
-                return (rect.width > winW * 0.8) || (cx > winW * 0.2 && cx < winW * 0.8);
-            }
-
-            // 0. HANDLE SPECIAL AUTH POPUPS (Must click, not close!)
-            let authorisedSpecial = false;
-            const buttonsOrLinks = Array.from(document.querySelectorAll('button, a, span'));
-            for (const el of buttonsOrLinks) {
-                if (el.innerText && el.innerText.trim().toLowerCase() === 'proceed to upload') {
-                    const clickable = el.closest('button') || el;
-                    clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                    authorisedSpecial = true;
-                }
-            }
-            if (authorisedSpecial) return 'auth_clicked'; // Exit evaluation early to allow React to process the click properly!
-
-
-
-            // 1. Target recognized annoying panels specifically and hide them
-            const allDivs = Array.from(document.querySelectorAll('div, p, h4, h2'));
-            for (const el of allDivs) {
-                if (el.innerText && (
-                    el.innerText.includes('Notifications') ||
-                    el.innerText.includes('Losing') ||
-                    el.innerText.includes('Meesho Fast Program') ||
-                    (el.innerText.includes('Announcement') && !el.innerText.includes('mportant Announcements'))
-                )) {
-                    let parent = el.closest('div[role="presentation"], div[class*="MuiPaper"], div[role="dialog"]');
-                    if (!parent) {
-                        let current = el.parentElement;
-                        while (current && current.tagName !== 'BODY') {
-                            const style = window.getComputedStyle(current);
-                            if (style.position === 'fixed' || parseInt(style.zIndex || 0) > 100) {
-                                parent = current;
-                                break;
-                            }
-                            current = current.parentElement;
-                        }
-                    }
-                    if (parent && parent.tagName !== 'BODY' && parent.id !== 'root' && isCentral(parent)) {
-                        parent.style.setProperty('display', 'none', 'important');
-                    }
-                }
-            }
-
-            // 2. Hide Generic Modals/Dialogs/Backdrops
-            const selectors = [
-                'div[role="dialog"]',
-                '.MuiModal-root',
-                '.MuiBackdrop-root',
-                '[class*="backdrop"]',
-                '[class*="joyride"]',
-                '[class*="tour"]',
-                '[class*="guide"]'
-            ];
-            document.querySelectorAll(selectors.join(', ')).forEach(el => {
-                if (isCentral(el)) {
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('pointer-events', 'none', 'important');
-                }
-            });
-
-            // 3. Fallback: try organically clicking any close SVG icons ONLY in central popups
-            document.querySelectorAll('svg').forEach(svg => {
-                // Heuristic for X cross icons
-                const path = svg.querySelector('path');
-                if ((svg.getAttribute('class') || '').toLowerCase().includes('close') ||
-                    (path && path.getAttribute('d') && path.getAttribute('d').length < 200 && path.getAttribute('d').includes('M'))) {
-
-                    let isPopup = false;
-                    let curr = svg;
-                    let popupContainer = null;
-                    while (curr && curr.tagName !== 'BODY') {
-                        const style = window.getComputedStyle(curr);
-                        if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex || 0) > 10) {
-                            isPopup = true;
-                            popupContainer = curr;
-                            break;
-                        }
-                        curr = curr.parentElement;
-                    }
-
-                    // IF it's in a popup AND the popup is in the center of the screen
-                    if (isPopup && isCentral(popupContainer)) {
-                        try {
-                            const clickable = svg.closest('button') || svg;
-                            clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                        } catch (e) { }
-                    }
-                }
-            });
-            return 'cleaned';
-        });
-        return result === 'auth_clicked';
-    } catch (e) {
-        return false;
-    }
-}
-
-// Function to clear dashboard immediately after login
-async function clearDashboard(page) {
-    console.log("  > Waiting 5s for dashboard ads to load...");
-    await page.waitForTimeout(5000);
-
-    console.log("  > Running cleanup loop for 5s...");
-    const endTime = Date.now() + 5000;
-    while (Date.now() < endTime) {
-        await nukePopups(page);
-        await page.waitForTimeout(500);
-    }
-    console.log("  > Dashboard cleanup done.");
-}
 
 // Dedicated function to handle the "We are having trouble" error page
 async function handleErrorPage(page) {
@@ -247,7 +122,7 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
 
             // 1. Nuke before clicking
             const authClicked = await nukePopups(page);
-            if (authClicked) {
+            if (authClicked && authClicked.authClicked) {
                 console.log(`  > Special Auth button clicked. Waiting for page state to advance...`);
                 await page.waitForTimeout(2000);
 

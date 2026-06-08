@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { nukePopups, clearDashboard } = require('./nuke_helper');
 const fs = require('fs');
 const path = require('path');
 
@@ -128,33 +129,7 @@ async function fetchReturnOTPs(browser, account) {
         await page.waitForTimeout(3000);
 
         // Close any popups that might intercept clicks
-        console.log(`[${username}] Closing any popups...`);
-        await page.evaluate(() => {
-            const winW = window.innerWidth;
-            document.querySelectorAll('svg').forEach(svg => {
-                const rect = svg.getBoundingClientRect();
-                const cx = rect.left + rect.width / 2;
-                if (rect.width > 0 && rect.height > 0 && cx > winW * 0.2 && cx < winW * 0.8) {
-                    let parent = svg;
-                    while (parent && parent.tagName !== 'BODY') {
-                        const style = window.getComputedStyle(parent);
-                        if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex || 0) > 10) {
-                            try { svg.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); } catch(e){}
-                            return;
-                        }
-                        parent = parent.parentElement;
-                    }
-                }
-            });
-            document.querySelectorAll('div').forEach(div => {
-                const style = window.getComputedStyle(div);
-                const zIndex = style.zIndex;
-                if (zIndex && parseInt(zIndex) >= 50 && (style.position === 'fixed' || style.position === 'absolute')) {
-                    div.style.setProperty('display', 'none', 'important');
-                }
-            });
-        });
-        await page.waitForTimeout(1000);
+        await clearDashboard(page);
 
         // Click on Returns tab
         console.log(`[${username}] Navigating to Returns tab...`);
