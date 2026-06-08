@@ -1,6 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { logBotError } = require('./logger');
 
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
@@ -344,12 +345,16 @@ async function updateInventoryForAccount(browser, account, updates) {
                             results.push({ sku, status: 'Success (Check Portal)', info: 'Assumed saved after click outside' });
                         }
                     } else {
-                        console.log(`[${username}] ❌ Could not find inline Stock input for SKU ${sku}.`);
-                        results.push({ sku, status: 'Failed', reason: 'Stock input not found' });
+                        const errMsg = `Could not find inline Stock input for SKU ${sku}`;
+                        console.log(`[${username}] ❌ ${errMsg}`);
+                        await logBotError(path.basename(__filename), username, errMsg, page, sku);
+                        results.push({ sku, status: 'Failed', reason: errMsg });
                     }
                 } else {
-                    console.log(`[${username}] ❌ SKU ${sku} row not found after search.`);
-                    results.push({ sku, status: 'Failed', reason: 'SKU not found in results' });
+                    const errMsg = `SKU row not found after search`;
+                    console.log(`[${username}] ❌ ${errMsg} for ${sku}.`);
+                    await logBotError(path.basename(__filename), username, errMsg, page, sku);
+                    results.push({ sku, status: 'Failed', reason: errMsg });
                 }
                 
                 // Reset search for next SKU by clearing search box
@@ -362,12 +367,14 @@ async function updateInventoryForAccount(browser, account, updates) {
 
             } catch (e) {
                 console.error(`[${username}] Error processing SKU ${sku}:`, e.message);
+                await logBotError(path.basename(__filename), username, e.message, page, sku);
                 results.push({ sku, status: 'Error', reason: e.message });
             }
         }
 
     } catch (e) {
         console.error(`[${username}] Global Error:`, e.message);
+        await logBotError(path.basename(__filename), username, `Global Error: ${e.message}`, page);
     } finally {
         await context.close();
     }

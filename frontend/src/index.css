@@ -22,6 +22,7 @@ a {
   text-decoration: none;
   color: inherit;
 }
+
 body {
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
   background: var(--bg-dark);
@@ -42,7 +43,7 @@ body {
   width: 280px;
   background: var(--bg-card);
   border-right: 1px solid var(--border-color);
-  padding: 2rem 1rem;
+  padding: 0.5rem 1rem 1rem 1rem;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
