@@ -396,6 +396,29 @@ app.delete('/api/errors', (req, res) => {
     }
 });
 
+app.delete('/api/errors/:index', (req, res) => {
+    try {
+        const index = parseInt(req.params.index, 10);
+        const errorsPath = path.join(__dirname, 'errors.json');
+        if (fs.existsSync(errorsPath)) {
+            let errors = JSON.parse(fs.readFileSync(errorsPath, 'utf8'));
+            if (index >= 0 && index < errors.length) {
+                const removed = errors.splice(index, 1)[0];
+                fs.writeFileSync(errorsPath, JSON.stringify(errors, null, 2));
+                if (removed.screenshot) {
+                    const screenshotPath = path.join(getErrorScreenshotsPath(), removed.screenshot);
+                    if (fs.existsSync(screenshotPath)) {
+                        fs.unlinkSync(screenshotPath);
+                    }
+                }
+            }
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/return-otps', (req, res) => {
     try {
         const otpsPath = path.join(__dirname, 'return_otps.json');

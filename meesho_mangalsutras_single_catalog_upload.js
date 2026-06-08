@@ -3,6 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const { logBotError } = require('./logger');
 
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+const origLog = console.log;
+console.log = (...args) => {
+    const user = asyncLocalStorage.getStore();
+    if (user && typeof args[0] === 'string') {
+        if (args[0].match(/^\s*[>!]/)) {
+            args[0] = `[${user}] ` + args[0].trimStart();
+        }
+    }
+    origLog(...args);
+};
+
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const IMAGES_DIR = path.join(__dirname, 'single_catalog_images');
@@ -668,7 +681,7 @@ async function runBot() {
     const browser = await chromium.launch({ headless: false, args: ['--start-maximized'] });
     
     for (const acc of accounts) {
-        await processAccount(browser, acc, groups, defaults);
+        await asyncLocalStorage.run(acc.username, () => processAccount(browser, acc, groups, defaults));
     }
     
     await browser.close();

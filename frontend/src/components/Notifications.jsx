@@ -1,10 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Trash2, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+import { Trash2, AlertTriangle, ExternalLink, RefreshCw, Search } from 'lucide-react';
 
 function Notifications() {
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredErrors = errors
+    .map((err, idx) => ({ ...err, originalIndex: idx }))
+    .filter(err => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      const botMatch = err.bot?.toLowerCase().includes(query);
+      const accountMatch = err.account?.toLowerCase().includes(query);
+      const skuMatch = err.sku?.toLowerCase().includes(query);
+      const messageMatch = err.message?.toLowerCase().includes(query);
+      const dateString = err.timestamp ? new Date(err.timestamp).toLocaleString().toLowerCase() : '';
+      const dateMatch = dateString.includes(query);
+      return botMatch || accountMatch || skuMatch || messageMatch || dateMatch;
+    });
 
   const fetchErrors = () => {
     fetch('http://localhost:3001/api/errors')
@@ -37,6 +52,20 @@ function Notifications() {
     }
   };
 
+  const deleteSingleError = async (index) => {
+    if (!window.confirm("Are you sure you want to delete this error notification?")) return;
+    try {
+      const res = await fetch(`http://localhost:3001/api/errors/${index}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setErrors(prev => prev.filter((_, i) => i !== index));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete error");
+    }
+  };
+
   if (loading) return <div className="glass-panel">Loading notifications...</div>;
 
   return (
@@ -54,22 +83,77 @@ function Notifications() {
         )}
       </div>
 
+      {errors.length > 0 && (
+        <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
+          <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+            <Search size={18} />
+          </span>
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Search by bot, account, SKU, message, or timestamp..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ paddingLeft: '2.75rem', paddingRight: searchQuery ? '2.5rem' : '1rem' }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              style={{
+                position: 'absolute',
+                right: '14px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                lineHeight: 1
+              }}
+              title="Clear search"
+            >
+              &times;
+            </button>
+          )}
+        </div>
+      )}
+
       {errors.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
           <AlertTriangle size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
           <h3>No errors found!</h3>
           <p>Your bots are running smoothly.</p>
         </div>
+      ) : filteredErrors.length === 0 ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+          <Search size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+          <h3>No matching notifications found</h3>
+          <p>Try refining your search query.</p>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {errors.map((err, idx) => (
-            <div key={idx} className="glass-panel" style={{ borderLeft: '4px solid var(--danger)', display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+          {filteredErrors.map((err) => (
+            <div key={err.originalIndex} className="glass-panel" style={{ borderLeft: '4px solid var(--danger)', display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                   <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{err.bot}</span>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {new Date(err.timestamp).toLocaleString()}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {new Date(err.timestamp).toLocaleString()}
+                    </span>
+                    <button 
+                      onClick={() => deleteSingleError(err.originalIndex)} 
+                      style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '0', display: 'flex' }}
+                      title="Delete this error"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>

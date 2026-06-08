@@ -3,6 +3,19 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+const origLog = console.log;
+console.log = (...args) => {
+    const user = asyncLocalStorage.getStore();
+    if (user && typeof args[0] === 'string') {
+        if (args[0].match(/^\s*[>!]/)) {
+            args[0] = `[${user}] ` + args[0].trimStart();
+        }
+    }
+    origLog(...args);
+};
+
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 // UPDATE THIS TO YOUR FOLDER PATH
@@ -503,7 +516,7 @@ async function runBot() {
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
 
-        const batchResults = await Promise.all(batch.map(account => processAccount(browser, account, uploadFiles)));
+        const batchResults = await Promise.all(batch.map(account => asyncLocalStorage.run(account.username, () => processAccount(browser, account, uploadFiles))));
         results.push(...batchResults);
 
         console.log("Batch complete. Waiting 5 seconds...");

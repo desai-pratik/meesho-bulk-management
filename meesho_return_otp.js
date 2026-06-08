@@ -2,6 +2,19 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+const origLog = console.log;
+console.log = (...args) => {
+    const user = asyncLocalStorage.getStore();
+    if (user && typeof args[0] === 'string') {
+        if (args[0].match(/^\s*[>!]/)) {
+            args[0] = `[${user}] ` + args[0].trimStart();
+        }
+    }
+    origLog(...args);
+};
+
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const ACCOUNTS_FILE = path.join(__dirname, 'accounts.csv');
 const OTPS_FILE = path.join(__dirname, 'return_otps.json');
