@@ -436,15 +436,24 @@ app.get('/api/scripts', (req, res) => {
     try {
         const files = fs.readdirSync(__dirname);
         const scripts = files.filter(f => f.startsWith('meesho_') && f.endsWith('.js'));
+        const activeAccounts = getActiveAccountsCount();
         
         const scriptInfo = scripts.map(s => {
             let name = s.replace('meesho_', '').replace('.js', '').replace(/_/g, ' ');
             // capitalize
             name = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            
+            const isRunning = activeProcesses.has(s);
+            const proc = isRunning ? activeProcesses.get(s) : null;
+            const estSec = proc ? proc.estimatedSeconds : getScriptEstimate(s, activeAccounts);
+            
             return {
                 filename: s,
                 name: name,
-                isRunning: activeProcesses.has(s)
+                isRunning: isRunning,
+                startTime: proc ? proc.startTime : null,
+                estimatedSeconds: estSec,
+                estimatedTime: formatDuration(estSec)
             };
         });
         
@@ -478,8 +487,13 @@ app.post('/api/run/:scriptName', (req, res) => {
             env.TARGET_ACCOUNT = account;
         }
         
+        const startTime = Date.now();
+        const runAccountsCount = account ? 1 : getActiveAccountsCount();
+        const estSec = getScriptEstimate(scriptName, runAccountsCount);
+        const estTime = formatDuration(estSec);
+        
         const child = spawn('node', [scriptName], { cwd: __dirname, env });
-        activeProcesses.set(scriptName, child);
+        activeProcesses.set(scriptName, { child, startTime, estimatedSeconds: estSec });
 
         child.stdout.on('data', (data) => {
             const msg = data.toString();
@@ -500,7 +514,13 @@ app.post('/api/run/:scriptName', (req, res) => {
             io.emit('processStatus', { script: scriptName, status: 'stopped' });
         });
 
-        io.emit('processStatus', { script: scriptName, status: 'running' });
+        io.emit('processStatus', { 
+            script: scriptName, 
+            status: 'running', 
+            startTime, 
+            estimatedSeconds: estSec, 
+            estimatedTime: estTime 
+        });
         res.json({ success: true, message: 'Script started' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -511,8 +531,8 @@ app.post('/api/stop/:scriptName', (req, res) => {
     const { scriptName } = req.params;
     
     if (activeProcesses.has(scriptName)) {
-        const child = activeProcesses.get(scriptName);
-        child.kill('SIGTERM');
+        const proc = activeProcesses.get(scriptName);
+        proc.child.kill('SIGTERM');
         activeProcesses.delete(scriptName);
         io.emit('log', { script: scriptName, type: 'system', message: 'Process killed by user' });
         io.emit('processStatus', { script: scriptName, status: 'stopped' });
@@ -521,6 +541,109 @@ app.post('/api/stop/:scriptName', (req, res) => {
     
     res.status(404).json({ error: 'Script is not running' });
 });
+
+// Estimation Helpers
+function getActiveAccountsCount() {
+    try {
+        const accountsPath = path.join(__dirname, 'accounts.csv');
+        if (!fs.existsSync(accountsPath)) return 0;
+        const csv = fs.readFileSync(accountsPath, 'utf8');
+        const lines = csv.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('username,'));
+        return lines.map(line => {
+            const parts = line.split(',');
+            const isActive = parts[3] ? parts[3].trim() === 'true' : true;
+            return isActive;
+        }).filter(Boolean).length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getCsvRowsCount(filename) {
+    try {
+        const filepath = path.join(__dirname, filename);
+        if (!fs.existsSync(filepath)) return 0;
+        const csv = fs.readFileSync(filepath, 'utf8');
+        return csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('sku,') && !l.startsWith('username,')).length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getSingleCatalogSkusCount() {
+    try {
+        const dir = path.join(__dirname, 'single_catalog_images');
+        if (!fs.existsSync(dir)) return 0;
+        const files = fs.readdirSync(dir).filter(f => !f.startsWith('.'));
+        const commonFiles = ['_a.jpg', '_b.jpg', '_c.jpg', '_a.png', '_b.png', '_c.png', '_a.jpeg', '_b.jpeg', '_c.jpeg'];
+        return files.filter(f => !commonFiles.some(cf => f.endsWith(cf))).length;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function getScriptEstimate(scriptName, activeAccounts) {
+    if (activeAccounts === 0) return 0;
+    
+    const loginAndNavTime = 15; // 15s average navigation/setup
+    
+    if (scriptName === 'meesho_inventory_stock_update.js') {
+        const skus = getCsvRowsCount('inventory_stock_updates.csv');
+        if (skus === 0) return 0;
+        return (activeAccounts * loginAndNavTime) + (activeAccounts * skus * 8);
+    }
+    
+    if (scriptName === 'meesho_inventory_price_update.js') {
+        const skus = getCsvRowsCount('inventory_updates.csv');
+        if (skus === 0) return 0;
+        return (activeAccounts * loginAndNavTime) + (activeAccounts * skus * 10);
+    }
+    
+    if (scriptName === 'meesho_order_process.js' || scriptName === 'meesho_order_process_no.js') {
+        return activeAccounts * 30; // 30s per account
+    }
+    
+    if (scriptName === 'meesho_pending_orders_sync.js') {
+        // Sync is fast, around 8s per account plus randomized delays (avg 10s between batches of 2)
+        return (activeAccounts * 8) + (Math.floor(activeAccounts / 2) * 2);
+    }
+    
+    if (scriptName === 'meesho_return_otp.js') {
+        return activeAccounts * 12; // 12s per account
+    }
+    
+    if (scriptName.includes('bulk_catalog_uploads')) {
+        let fileCount = 0;
+        try {
+            const dir = path.join(__dirname, 'uploaded-files');
+            if (fs.existsSync(dir)) {
+                const files = fs.readdirSync(dir);
+                fileCount = files.filter(f => f.endsWith('.xlsx') || f.endsWith('.csv')).length;
+            }
+        } catch(e) {}
+        if (fileCount === 0) return 0;
+        return activeAccounts * fileCount * 45; // 45s per file
+    }
+    
+    if (scriptName.includes('catalog_uploads') || scriptName.includes('catalog_upload')) {
+        const skus = getSingleCatalogSkusCount();
+        if (skus === 0) return 0;
+        return activeAccounts * skus * 60; // 60s per SKU
+    }
+    
+    return activeAccounts * 20; // default 20s per account
+}
+
+function formatDuration(seconds) {
+    if (seconds <= 0) return '1 min';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    
+    if (h > 0) {
+        return `${h} hour${h > 1 ? 's' : ''}${m > 0 ? ` ${m} min${m > 1 ? 's' : ''}` : ''}`;
+    }
+    return `${m || 1} min${m > 1 ? 's' : ''}`;
+}
 
 const PORT = 3001;
 server.listen(PORT, () => {

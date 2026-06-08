@@ -59,7 +59,13 @@ function App() {
     // Listen for status changes
     socket.on('processStatus', (data) => {
       setScripts(prev => prev.map(s =>
-        s.filename === data.script ? { ...s, isRunning: data.status === 'running' } : s
+        s.filename === data.script ? { 
+          ...s, 
+          isRunning: data.status === 'running', 
+          startTime: data.startTime,
+          estimatedTime: data.estimatedTime || s.estimatedTime,
+          estimatedSeconds: data.estimatedSeconds || s.estimatedSeconds
+        } : s
       ));
     });
 
