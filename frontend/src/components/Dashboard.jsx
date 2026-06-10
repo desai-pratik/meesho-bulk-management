@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Search } from 'lucide-react';
 import BotCard from './BotCard';
 
 function Dashboard({ scripts, onTrigger }) {
   const [stats, setStats] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Find the actual running state of the fetch stats script from the backend
   const fetchStatsScript = scripts?.find(s => s.filename === 'meesho_pending_orders_sync.js');
@@ -70,6 +72,14 @@ function Dashboard({ scripts, onTrigger }) {
     }
     return null;
   };
+
+  const filteredScripts = scripts?.filter(script => {
+    const query = searchTerm.toLowerCase();
+    return (
+      script.name?.toLowerCase().includes(query) ||
+      script.filename?.toLowerCase().includes(query)
+    );
+  }) || [];
 
   return (
     <div>
@@ -151,12 +161,30 @@ function Dashboard({ scripts, onTrigger }) {
         )}
       </div>
 
-      <h2 style={{ marginBottom: '1.5rem', fontSize: '1.4rem' }}>Available Bots</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Available Bots</h2>
+        <div style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+            <Search size={16} />
+          </span>
+          <input
+            type="text"
+            placeholder="Search bots..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="input-field"
+            style={{ paddingLeft: '36px' }}
+          />
+        </div>
+      </div>
+
       {(!scripts || scripts.length === 0) ? (
         <div className="glass-panel" style={{textAlign:"center"}}>No scripts found. Please check backend connection.</div>
+      ) : filteredScripts.length === 0 ? (
+        <div className="glass-panel" style={{textAlign:"center", color: 'var(--text-muted)'}}>No bots match your search term.</div>
       ) : (
         <div className="dashboard-grid">
-          {scripts.map(script => (
+          {filteredScripts.map(script => (
             <BotCard key={script.filename} script={script} onTrigger={onTrigger} />
           ))}
         </div>
