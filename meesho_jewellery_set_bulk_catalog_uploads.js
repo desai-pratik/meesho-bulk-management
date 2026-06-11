@@ -4,11 +4,24 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+const { AsyncLocalStorage } = require('async_hooks');
+const asyncLocalStorage = new AsyncLocalStorage();
+const origLog = console.log;
+console.log = (...args) => {
+    const user = asyncLocalStorage.getStore();
+    if (user && typeof args[0] === 'string') {
+        if (args[0].match(/^\s*[>!]/)) {
+            args[0] = `[${user}] ` + args[0].trimStart();
+        }
+    }
+    origLog(...args);
+};
+
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 // UPDATE THIS TO YOUR FOLDER PATH
 // const FILE_PATH = String.raw`c:\Users\ASUS\Downloads\pratik`;
-const FILE_PATH = String.raw`C:\meesho-bulk-management\uploaded-files`;
+const FILE_PATH = path.join(__dirname, 'uploaded-files');
 
 // Helper to read accounts
 function getAccounts() {
@@ -194,19 +207,6 @@ async function processAccount(browser, account, uploadFiles) {
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     };
     if (require('fs').existsSync(sessionPath)) {
-
-const { AsyncLocalStorage } = require('async_hooks');
-const asyncLocalStorage = new AsyncLocalStorage();
-const origLog = console.log;
-console.log = (...args) => {
-    const user = asyncLocalStorage.getStore();
-    if (user && typeof args[0] === 'string') {
-        if (args[0].match(/^\s*[>!]/)) {
-            args[0] = `[${user}] ` + args[0].trimStart();
-        }
-    }
-    origLog(...args);
-};
         contextOptions.storageState = sessionPath;
     }
     const context = await browser.newContext(contextOptions);

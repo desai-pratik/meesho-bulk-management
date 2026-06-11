@@ -21,7 +21,7 @@ console.log = (...args) => {
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 // UPDATE THIS TO YOUR FOLDER PATH
 // const FILE_PATH = String.raw`c:\Users\ASUS\Downloads\pratik`;
-const FILE_PATH = String.raw`C:\meesho-bulk-management\uploaded-files`;
+const FILE_PATH = path.join(__dirname, 'uploaded-files');
 
 // Helper to read accounts
 function getAccounts() {

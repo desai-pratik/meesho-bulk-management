@@ -19,7 +19,7 @@ console.log = (...args) => {
 
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
-const DOWNLOAD_PATH = String.raw`C:\meesho-bulk-management\labels`;
+const DOWNLOAD_PATH = path.join(__dirname, 'labels');
 
 // Ensure download directory exists
 if (!fs.existsSync(DOWNLOAD_PATH)) {
