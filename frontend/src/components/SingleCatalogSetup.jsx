@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, NavLink } from 'react-router-dom';
-import { Save, Image as ImageIcon, Search } from 'lucide-react';
+import { Save, Image as ImageIcon, Search, Trash2, UploadCloud } from 'lucide-react';
 
 function SingleCatalogSetup({ socket }) {
   const { category } = useParams();
@@ -30,11 +30,16 @@ function SingleCatalogSetup({ socket }) {
   const [images, setImages] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [photoSearchQuery, setPhotoSearchQuery] = useState('');
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
 
   const fetchImages = () => {
     fetch('http://localhost:3001/api/single-catalog-images')
       .then(res => res.json())
-      .then(data => setImages(data))
+      .then(data => {
+        setImages(data);
+        setSelectedImages(prev => prev.filter(name => data.some(img => img.name === name)));
+      })
       .catch(console.error);
   };
 
@@ -128,6 +133,29 @@ function SingleCatalogSetup({ socket }) {
     }
   };
 
+  const toggleSelectImage = (filename) => {
+    setSelectedImages(prev =>
+      prev.includes(filename)
+        ? prev.filter(name => name !== filename)
+        : [...prev, filename]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!window.confirm(`Are you sure you want to delete the ${selectedImages.length} selected photos?`)) return;
+    try {
+      const deletePromises = selectedImages.map(filename =>
+        fetch(`http://localhost:3001/api/single-catalog-images/${filename}`, { method: 'DELETE' })
+      );
+      await Promise.all(deletePromises);
+      setSelectedImages([]);
+      fetchImages();
+    } catch (error) {
+      console.error(error);
+      alert('Failed to delete selected photos.');
+    }
+  };
+
   if (loading) return <div className="glass-panel">Loading...</div>;
 
   return (
@@ -139,19 +167,19 @@ function SingleCatalogSetup({ socket }) {
             Set the default details for {activeCategory === 'jewellery_set' ? 'Jewellery Set' : 'Mangalsutras'} uploads. These will be applied to all your photos.
           </p>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-            <NavLink 
+            <NavLink
               to="/single-catalog/jewellery-set"
               className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             >
               Jewellery Set
             </NavLink>
-            <NavLink 
+            <NavLink
               to="/single-catalog/mangalsutras"
               className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             >
               Mangalsutras
             </NavLink>
-            <NavLink 
+            <NavLink
               to="/single-catalog/mattress-protection"
               className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             >
@@ -162,6 +190,141 @@ function SingleCatalogSetup({ socket }) {
         <button className="btn btn-primary" onClick={handleSave}>
           <Save size={16} /> Save Defaults
         </button>
+      </div>
+
+      {/* Photo Upload Section */}
+      <div className="glass-panel">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <ImageIcon size={18} color="var(--primary)" /> Uploaded Photos ({images.length})
+            </h3>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="search"
+                className="input-field"
+                placeholder="Search photos..."
+                value={photoSearchQuery}
+                onChange={(e) => setPhotoSearchQuery(e.target.value)}
+                style={{ paddingLeft: '32px', minWidth: '200px', paddingTop: '7px', paddingBottom: '7px' }}
+              />
+            </div>
+            {selectedImages.length > 0 ? (
+              <button
+                className="btn btn-danger"
+                style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                onClick={handleDeleteSelected}
+                disabled={uploading}
+              >
+                <Trash2 size={15} /> Delete Selected ({selectedImages.length})
+              </button>
+            ) : (
+              images.length > 0 && (
+                <button
+                  className="btn btn-danger"
+                  style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  onClick={handleDeleteAll}
+                  disabled={uploading}
+                >
+                  <Trash2 size={15} /> Remove All
+                </button>
+              )
+            )}
+            <label className="btn btn-primary" style={{ cursor: 'pointer', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <UploadCloud size={15} /> {uploading ? 'Uploading...' : 'Upload Photos'}
+              <input type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
+            </label>
+          </div>
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+          Upload your SKUs (e.g., `isr_2981.jpg`) and your common files (`_a.jpg`, `_b.jpg`, `_c.jpg`) here. The bot will read them from this list.
+        </p>
+
+        {images.length === 0 ? (
+          <label className="upload-empty-state" style={{ width: '100%' }}>
+            <UploadCloud size={40} color="var(--primary)" />
+            <h4 style={{ margin: '0.25rem 0' }}>No photos uploaded yet</h4>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Click to select and upload your product photos</p>
+            <input type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
+          </label>
+        ) : (
+          <div className="photo-grid-container">
+            {images
+              .filter(img => !photoSearchQuery || img.name.toLowerCase().includes(photoSearchQuery.toLowerCase()))
+              .map(img => {
+                const isSelected = selectedImages.includes(img.name);
+                const formatSize = (bytes) => {
+                  if (!bytes) return '0 B';
+                  const k = 1024;
+                  const sizes = ['B', 'KB', 'MB'];
+                  const i = Math.floor(Math.log(bytes) / Math.log(k));
+                  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                };
+                return (
+                  <div
+                    key={img.name}
+                    className="photo-card"
+                    style={{
+                      cursor: 'pointer',
+                      ...(isSelected ? { borderColor: 'var(--primary)', boxShadow: '0 0 10px rgba(99, 102, 241, 0.3)' } : {})
+                    }}
+                    onClick={() => setPreviewImage(img)}
+                  >
+                    <input
+                      type="checkbox"
+                      style={{
+                        position: 'absolute',
+                        top: '8px',
+                        left: '8px',
+                        width: '18px',
+                        height: '18px',
+                        cursor: 'pointer',
+                        accentColor: 'var(--primary)',
+                        zIndex: 5
+                      }}
+                      checked={isSelected}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelectImage(img.name)}
+                    />
+                    <button
+                      className="delete-photo-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteImage(img.name);
+                      }}
+                      title="Delete Photo"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                    <div className="photo-card-img-wrapper">
+                      <img
+                        src={`http://localhost:3001/single_catalog_images/${encodeURIComponent(img.name)}`}
+                        alt={img.name}
+                        className="photo-card-img"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'block';
+                        }}
+                      />
+                      <div style={{ display: 'none' }}><ImageIcon size={32} color="var(--text-muted)" /></div>
+                    </div>
+                    <div className="photo-card-info">
+                      <div className="photo-card-name" title={img.name}>
+                        {img.name}
+                      </div>
+                      <div className="photo-card-size">
+                        {img.size ? formatSize(img.size) : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
@@ -305,80 +468,71 @@ function SingleCatalogSetup({ socket }) {
         </div>
       </div>
 
-      {/* Photo Upload Section */}
-      <div className="glass-panel" style={{ marginTop: '0.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ImageIcon size={18} /> Uploaded Photos ({images.length})
-          </h3>
-          
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="search"
-                className="input-field"
-                placeholder="Search photos..."
-                value={photoSearchQuery}
-                onChange={(e) => setPhotoSearchQuery(e.target.value)}
-                style={{ paddingLeft: '32px', minWidth: '200px' }}
-              />
+      {previewImage && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="modal-close-btn" onClick={() => setPreviewImage(null)}>
+              &times;
+            </button>
+            <div className="modal-body">
+              <div className="modal-image-container">
+                <img
+                  src={`http://localhost:3001/single_catalog_images/${encodeURIComponent(previewImage.name)}`}
+                  alt={previewImage.name}
+                  className="modal-image"
+                />
+              </div>
+              <div className="modal-details-container">
+                <h3>Photo Details</h3>
+                <div className="details-list">
+                  <div className="detail-item">
+                    <span className="detail-label">Filename:</span>
+                    <span className="detail-value text-mono" title={previewImage.name}>{previewImage.name}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">File Type:</span>
+                    <span className="detail-value">{previewImage.name.split('.').pop().toUpperCase()} Image</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">File Size:</span>
+                    <span className="detail-value">
+                      {previewImage.size ? (() => {
+                        const bytes = previewImage.size;
+                        const k = 1024;
+                        const sizes = ['B', 'KB', 'MB'];
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                      })() : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Role:</span>
+                    <span className="detail-value">
+                      {(() => {
+                        const commonFiles = ['_a.jpg', '_b.jpg', '_c.jpg', '_a.png', '_b.png', '_c.png', '_a.jpeg', '_b.jpeg', '_c.jpeg'];
+                        const isCommon = commonFiles.some(cf => previewImage.name.toLowerCase().endsWith(cf));
+                        return isCommon ? 'Common / Side Photo' : 'Main SKU Photo';
+                      })()}
+                    </span>
+                  </div>
+                  {previewImage.mtime && (
+                    <div className="detail-item">
+                      <span className="detail-label">Last Modified:</span>
+                      <span className="detail-value">{new Date(previewImage.mtime).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            {images.length > 0 && (
-              <button
-                className="btn"
-                style={{ background: 'var(--danger)', color: 'white', border: 'none', cursor: 'pointer', padding: '0.5rem 1rem', borderRadius: '4px' }}
-                onClick={handleDeleteAll}
-                disabled={uploading}
-              >
-                Remove All Photos
-              </button>
-            )}
-            <label className="btn btn-primary" style={{ cursor: 'pointer', padding: '0.5rem 1rem', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-              {uploading ? 'Uploading...' : 'Upload Photos'}
-              <input type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
-            </label>
           </div>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-          Upload your SKUs (e.g., `isr_2981.jpg`) and your common files (`_a.jpg`, `_b.jpg`, `_c.jpg`) here. The bot will read them from this list.
-        </p>
-
-        {images.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No images uploaded yet.</div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.5rem' }}>
-            {images
-              .filter(img => !photoSearchQuery || img.name.toLowerCase().includes(photoSearchQuery.toLowerCase()))
-              .map(img => (
-              <div key={img.name} style={{ background: 'var(--bg-color)', borderRadius: '8px', padding: '0.3rem', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-                <div style={{ width: '100%', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', borderRadius: '4px', marginBottom: '0.5rem', overflow: 'hidden' }}>
-                  <img
-                    src={`http://localhost:3001/single_catalog_images/${encodeURIComponent(img.name)}`}
-                    alt={img.name}
-                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextSibling.style.display = 'block';
-                    }}
-                  />
-                  <div style={{ display: 'none' }}><ImageIcon size={32} color="var(--text-muted)" /></div>
-                </div>
-                <div style={{ fontSize: '0.8rem', textAlign: 'center', wordBreak: 'break-all', width: '100%' }}>
-                  {img.name}
-                </div>
-                <button
-                  onClick={() => handleDeleteImage(img.name)}
-                  style={{ position: 'absolute', top: '-1px', right: '-1px', background: 'var(--danger)', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer' }}
-                  title="Delete"
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
     </div>
   );

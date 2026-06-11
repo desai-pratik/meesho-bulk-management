@@ -59,9 +59,9 @@ function App() {
     // Listen for status changes
     socket.on('processStatus', (data) => {
       setScripts(prev => prev.map(s =>
-        s.filename === data.script ? { 
-          ...s, 
-          isRunning: data.status === 'running', 
+        s.filename === data.script ? {
+          ...s,
+          isRunning: data.status === 'running',
           startTime: data.startTime,
           estimatedTime: data.estimatedTime || s.estimatedTime,
           estimatedSeconds: data.estimatedSeconds || s.estimatedSeconds
@@ -161,6 +161,10 @@ function App() {
             <Bell size={18} /> Notifications {errorCount > 0 && <span style={{ background: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', position: 'absolute', top: '14px', right: '14px', color: 'white' }}>{errorCount}</span>}
           </NavLink>
         </nav>
+
+        <div style={{ padding: '1rem', fontSize: "12px", color: "#888", marginTop: "auto", textAlign: "center" }}>
+          © 2026 BY Pratik Desai.
+        </div>
       </aside>
 
       <div className="main-wrapper">
@@ -182,7 +186,7 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            
+
             <Route path="/dashboard" element={
               <>
                 <Dashboard scripts={scripts} onTrigger={triggerScript} />
@@ -202,7 +206,8 @@ function App() {
               <ReturnOTPs scripts={scripts} onTrigger={triggerScript} />
             } />
 
-            <Route path="/inventory-updates" element={
+            <Route path="/inventory-updates" element={<Navigate to="/inventory-updates/price" replace />} />
+            <Route path="/inventory-updates/:type" element={
               <InventoryUpdatesManager />
             } />
 
