@@ -26,12 +26,12 @@ function updateReturnOTPs(username, extractedOtps) {
         if (fs.existsSync(OTPS_FILE)) {
             try {
                 otps = JSON.parse(fs.readFileSync(OTPS_FILE, 'utf8'));
-            } catch (err) {}
+            } catch (err) { }
         }
-        
+
         // Remove old entries for this account
         otps = otps.filter(o => o.account !== username);
-        
+
         // Add new entries
         for (const [courier, otp] of Object.entries(extractedOtps)) {
             otps.push({
@@ -41,7 +41,7 @@ function updateReturnOTPs(username, extractedOtps) {
                 timestamp: new Date().toISOString()
             });
         }
-        
+
         fs.writeFileSync(OTPS_FILE, JSON.stringify(otps, null, 2));
     } catch (e) {
         console.error("Error updating return OTPs:", e.message);
@@ -55,7 +55,7 @@ async function loadAccounts() {
         }
         const csvText = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
         const lines = csvText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
-        
+
         let allAccounts = lines.map(line => {
             const parts = line.split(',');
             const username = parts[0]?.replace(/^"|"$/g, '');
@@ -64,12 +64,12 @@ async function loadAccounts() {
             const isActive = isActiveStr ? isActiveStr.trim() === 'true' : true;
             return { username, password, isActive };
         }).filter(acc => acc.username && acc.password && acc.isActive);
-        
+
         // If TARGET_ACCOUNT is set, filter for it
         if (process.env.TARGET_ACCOUNT) {
             allAccounts = allAccounts.filter(acc => acc.username === process.env.TARGET_ACCOUNT);
         }
-        
+
         return allAccounts;
     } catch (e) {
         console.error("Error reading accounts.csv:", e.message);
@@ -81,16 +81,12 @@ async function fetchReturnOTPs(browser, account) {
     const { username, password } = account;
     console.log(`\n=== Fetching Return OTPs: ${username} ===`);
 
-    const sessionPath = path.join(__dirname, 'sessions', `${username}.json`);
     let contextOptions = {
         viewport: null,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     };
-    if (fs.existsSync(sessionPath)) {
-        contextOptions.storageState = sessionPath;
-    }
     const context = await browser.newContext(contextOptions);
-    
+
     await context.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
@@ -119,7 +115,7 @@ async function fetchReturnOTPs(browser, account) {
             await emailInput.fill(username);
             await page.getByRole('textbox', { name: 'Password' }).fill(password);
             await page.getByRole('button', { name: 'Log in', exact: true }).click();
-            try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
+            try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
             await context.storageState({ path: sessionPath });
         } else {
             console.log(`[${username}] Successfully used saved session!`);
@@ -138,12 +134,12 @@ async function fetchReturnOTPs(browser, account) {
             await returnsLink.waitFor({ timeout: 10000 });
             await returnsLink.click({ force: true });
             await page.waitForTimeout(2000);
-            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => { });
             await page.waitForTimeout(5000);
         } catch (err) {
             console.log(`[${username}] Could not find Returns tab, trying direct URL...`);
             await page.goto('https://supplier.meesho.com/panel/v3/new/returns', { timeout: 30000 });
-            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => { });
             await page.waitForTimeout(6000);
         }
 
@@ -155,19 +151,19 @@ async function fetchReturnOTPs(browser, account) {
                 await viewMoreBtn.click({ force: true });
                 await page.waitForTimeout(2000); // Wait for popup to open
             }
-        } catch (err) {}
+        } catch (err) { }
 
         console.log(`[${username}] Extracting OTPs...`);
-        
+
         // Strategy: Get all text from the page and look for Courier names and nearby 4-6 digit numbers.
         // Also look explicitly for typical OTP phrases like "OTP: 1234" or "Shadowfax: 1234".
         // Since we don't know the exact structure, we use a broad extraction.
-        
+
         const extractedData = await page.evaluate(() => {
             const result = {};
             // Look for known courier partners in all elements
             const couriers = ['shadowfax', 'valmo', 'delhivery', 'ecom express', 'xpressbees'];
-            
+
             // Helper to get text nodes
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
             let node;
@@ -176,7 +172,7 @@ async function fetchReturnOTPs(browser, account) {
                 const text = node.nodeValue.trim();
                 if (text.length > 0) texts.push(text);
             }
-            
+
             // Find courier names and the nearest following number that could be an OTP
             for (let i = 0; i < texts.length; i++) {
                 const t = texts[i].toLowerCase();
@@ -184,15 +180,15 @@ async function fetchReturnOTPs(browser, account) {
                     if (t.includes(c)) {
                         // Look at this text and the next few texts for a number (4 to 6 digits)
                         let foundOtp = null;
-                        
+
                         // Check if OTP is in the same string (e.g. "Shadowfax - 123456")
                         const inlineMatch = texts[i].match(/(?:otp)?[^\d]*(\d{4,6})/i);
                         if (inlineMatch && inlineMatch[1]) {
                             foundOtp = inlineMatch[1];
                         } else {
                             // Check next few strings
-                            for (let j = 1; j <= 5 && i+j < texts.length; j++) {
-                                const nextText = texts[i+j];
+                            for (let j = 1; j <= 5 && i + j < texts.length; j++) {
+                                const nextText = texts[i + j];
                                 const match = nextText.match(/^(\d{4,6})$/);
                                 if (match) {
                                     foundOtp = match[1];
@@ -206,7 +202,7 @@ async function fetchReturnOTPs(browser, account) {
                                 }
                             }
                         }
-                        
+
                         if (foundOtp) {
                             // Capitalize courier name
                             const cName = c.charAt(0).toUpperCase() + c.slice(1);
@@ -230,7 +226,7 @@ async function fetchReturnOTPs(browser, account) {
             // Clear existing OTPs for this account since none were found
             updateReturnOTPs(username, {});
         }
-        
+
     } catch (e) {
         console.log(`[${username}] ERROR: ${e.message}`);
     } finally {

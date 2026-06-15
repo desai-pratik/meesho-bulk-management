@@ -201,14 +201,10 @@ async function processAccount(browser, account, uploadFiles) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
-    const sessionPath = require('path').join(__dirname, 'sessions', `${username}.json`);
     let contextOptions = {
         viewport: null,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     };
-    if (require('fs').existsSync(sessionPath)) {
-        contextOptions.storageState = sessionPath;
-    }
     const context = await browser.newContext(contextOptions);
 
     // Inject stealth scripts to look like a human
@@ -228,27 +224,14 @@ async function processAccount(browser, account, uploadFiles) {
         console.log(`[${username}] Navigating to Meesho...`);
         await page.goto(LOGIN_URL, { timeout: 30000 });
 
-        try {
-            await Promise.race([
-                page.waitForSelector('input[name="emailOrMobile"]', { timeout: 30000 }),
-                page.getByText('Orders', { exact: true }).first().waitFor({ timeout: 30000 })
-            ]);
-        } catch (e) {
-            console.log(`[${username}] Warning: Timeout waiting for page to load.`);
-        }
-
         const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        if (await emailInput.isVisible()) {
-            console.log(`[${username}] Not logged in. Logging in now...`);
-            await emailInput.fill(username);
-            await page.getByRole('textbox', { name: 'Password' }).fill(password);
-            await page.getByRole('button', { name: 'Log in', exact: true }).click();
-            try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
-            await context.storageState({ path: sessionPath });
-        } else {
-            console.log(`[${username}] Successfully used saved session! Skipping login.`);
-            await context.storageState({ path: sessionPath });
-        }
+        await emailInput.waitFor({ state: 'visible', timeout: 30000 });
+
+        console.log(`[${username}] Logging in now...`);
+        await emailInput.fill(username);
+        await page.getByRole('textbox', { name: 'Password' }).fill(password);
+        await page.getByRole('button', { name: 'Log in', exact: true }).click();
+        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
 
         // 2. Clear Dashboard Ads
         await clearDashboard(page);
