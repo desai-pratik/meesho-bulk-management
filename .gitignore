@@ -16,3 +16,12 @@ build/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+*.json
+*.png
+*.xlsx
+*.pdf
+*.jpg
+*.jpeg
+*.csv
+*.webp
