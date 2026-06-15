@@ -408,9 +408,7 @@ async function processAccount(browser, account, groups, defaults) {
     const { username, password } = account;
     console.log(`\n=== Starting Single Catalog Uploads for: ${username} ===`);
 
-    const sessionPath = path.join(__dirname, 'sessions', `${username}.json`);
     let contextOptions = { viewport: null };
-    if (fs.existsSync(sessionPath)) contextOptions.storageState = sessionPath;
     
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
@@ -418,26 +416,15 @@ async function processAccount(browser, account, groups, defaults) {
 
     try {
         await page.goto(LOGIN_URL, { timeout: 30000 });
-        
-        try {
-            await Promise.race([
-                page.waitForSelector('input[name="emailOrMobile"]', { timeout: 15000 }),
-                page.getByText('Catalog Uploads', { exact: true }).first().waitFor({ timeout: 15000 })
-            ]);
-        } catch (e) {}
 
         const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        if (await emailInput.isVisible().catch(()=>false)) {
-            console.log(`  > Logging in...`);
-            await emailInput.fill(username);
-            await page.getByRole('textbox', { name: 'Password' }).fill(password);
-            await page.getByRole('button', { name: 'Log in', exact: true }).click();
-            try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch(e) {}
-            await context.storageState({ path: sessionPath });
-        } else {
-            console.log(`  > Using saved session`);
-            await context.storageState({ path: sessionPath });
-        }
+        await emailInput.waitFor({ state: 'visible', timeout: 15000 });
+
+        console.log(`  > Logging in...`);
+        await emailInput.fill(username);
+        await page.getByRole('textbox', { name: 'Password' }).fill(password);
+        await page.getByRole('button', { name: 'Log in', exact: true }).click();
+        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch(e) {}
         
         await clearDashboard(page);
 
