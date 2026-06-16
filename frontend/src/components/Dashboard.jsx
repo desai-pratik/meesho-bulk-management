@@ -84,7 +84,7 @@ function Dashboard({ scripts, onTrigger }) {
   return (
     <div>
       {/* Chart Section */}
-      <div className="glass-panel" style={{ marginBottom: '2rem' }}>
+      <div className="glass-panel" style={{ marginBottom: '1rem' }}>
         <h2 style={{ marginBottom: '1rem', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <span>Pending Orders Overview <span style={{ color: 'var(--primary)', marginLeft: '8px', fontSize: '1.1rem' }}>{totalPending > 0 ? `(${totalPending})` : ''}</span></span>
@@ -161,7 +161,7 @@ function Dashboard({ scripts, onTrigger }) {
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Available Bots</h2>
         <div style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
           <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
@@ -179,9 +179,9 @@ function Dashboard({ scripts, onTrigger }) {
       </div>
 
       {(!scripts || scripts.length === 0) ? (
-        <div className="glass-panel" style={{textAlign:"center"}}>No scripts found. Please check backend connection.</div>
+        <div className="glass-panel" style={{ textAlign: "center" }}>No scripts found. Please check backend connection.</div>
       ) : filteredScripts.length === 0 ? (
-        <div className="glass-panel" style={{textAlign:"center", color: 'var(--text-muted)'}}>No bots match your search term.</div>
+        <div className="glass-panel" style={{ textAlign: "center", color: 'var(--text-muted)' }}>No bots match your search term.</div>
       ) : (
         <div className="dashboard-grid">
           {filteredScripts.map(script => (
