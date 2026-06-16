@@ -65,9 +65,10 @@ async function loadAccounts() {
             return { username, password, isActive };
         }).filter(acc => acc.username && acc.password && acc.isActive);
 
-        // If TARGET_ACCOUNT is set, filter for it
+        // If TARGET_ACCOUNT is set, filter for it (supports comma-separated list of accounts)
         if (process.env.TARGET_ACCOUNT) {
-            allAccounts = allAccounts.filter(acc => acc.username === process.env.TARGET_ACCOUNT);
+            const targets = process.env.TARGET_ACCOUNT.split(',').map(t => t.trim());
+            allAccounts = allAccounts.filter(acc => targets.includes(acc.username));
         }
 
         return allAccounts;
@@ -100,28 +101,15 @@ async function fetchReturnOTPs(browser, account) {
         console.log(`[${username}] Navigating to Meesho...`);
         await page.goto(LOGIN_URL, { timeout: 30000 });
 
-        try {
-            await Promise.race([
-                page.waitForSelector('input[name="emailOrMobile"]', { timeout: 15000 }),
-                page.getByText('Orders', { exact: true }).first().waitFor({ timeout: 15000 })
-            ]);
-        } catch (e) {
-            console.log(`[${username}] Warning: Timeout waiting for page to load.`);
-        }
-
         const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        if (await emailInput.isVisible()) {
-            console.log(`[${username}] Not logged in. Logging in now...`);
-            await emailInput.fill(username);
-            await page.getByRole('textbox', { name: 'Password' }).fill(password);
-            await page.getByRole('button', { name: 'Log in', exact: true }).click();
-            try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
-            await context.storageState({ path: sessionPath });
-        } else {
-            console.log(`[${username}] Successfully used saved session!`);
-            await context.storageState({ path: sessionPath });
-        }
+        await emailInput.waitFor({ state: 'visible', timeout: 30000 });
 
+        console.log(`[${username}] Logging in...`);
+        await emailInput.fill(username);
+        await page.getByRole('textbox', { name: 'Password' }).fill(password);
+        await page.getByRole('button', { name: 'Log in', exact: true }).click();
+        
+        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
         await page.waitForTimeout(3000);
 
         // Close any popups that might intercept clicks
@@ -256,11 +244,18 @@ async function runFetcher() {
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
     });
 
-    for (let i = 0; i < accounts.length; i++) {
-        await fetchReturnOTPs(browser, accounts[i]);
-        if (i < accounts.length - 1) {
-            console.log("Waiting 5-10 seconds before next account...");
-            const delay = Math.floor(Math.random() * (10000 - 5000 + 1)) + 5000;
+    const BATCH_SIZE = 2; // Process 2 accounts at a time
+    for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+        const batch = accounts.slice(i, i + BATCH_SIZE);
+        console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
+
+        await Promise.all(batch.map(account => 
+            asyncLocalStorage.run(account.username, () => fetchReturnOTPs(browser, account))
+        ));
+
+        if (i + BATCH_SIZE < accounts.length) {
+            console.log("Batch complete. Waiting 8-12 seconds before next batch to prevent rate-limiting...");
+            const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
             await new Promise(r => setTimeout(r, delay));
         }
     }
