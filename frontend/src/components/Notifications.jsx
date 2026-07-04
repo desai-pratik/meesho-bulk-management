@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Trash2, AlertTriangle, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 function Notifications() {
   const [errors, setErrors] = useState([]);
@@ -22,7 +23,7 @@ function Notifications() {
     });
 
   const fetchErrors = () => {
-    fetch('http://localhost:3001/api/errors')
+    fetch(`${BACKEND_URL}/api/errors`)
       .then(res => res.json())
       .then(data => {
         setErrors(data || []);
@@ -43,7 +44,7 @@ function Notifications() {
   const clearAll = async () => {
     if (!window.confirm("Are you sure you want to clear all error notifications?")) return;
     try {
-      const res = await fetch('http://localhost:3001/api/errors', { method: 'DELETE' });
+      const res = await fetch(`${BACKEND_URL}/api/errors`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) setErrors([]);
     } catch (e) {
@@ -55,7 +56,7 @@ function Notifications() {
   const deleteSingleError = async (index) => {
     if (!window.confirm("Are you sure you want to delete this error notification?")) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/errors/${index}`, { method: 'DELETE' });
+      const res = await fetch(`${BACKEND_URL}/api/errors/${index}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         setErrors(prev => prev.filter((_, i) => i !== index));
@@ -176,10 +177,10 @@ function Notifications() {
               {err.screenshot && (
                 <div
                   style={{ width: '150px', height: '100px', cursor: 'pointer', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' }}
-                  onClick={() => setSelectedImage(`http://localhost:3001/error_screenshots/${err.screenshot}`)}
+                  onClick={() => setSelectedImage(`${BACKEND_URL}/error_screenshots/${err.screenshot}`)}
                 >
                   <img
-                    src={`http://localhost:3001/error_screenshots/${err.screenshot}`}
+                    src={`${BACKEND_URL}/error_screenshots/${err.screenshot}`}
                     alt="Error Screenshot"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />

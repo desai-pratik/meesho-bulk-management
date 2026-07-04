@@ -289,7 +289,7 @@ async function runBot() {
     console.log(`Loaded ${accounts.length} accounts and ${updates.length} SKU stock updates.`);
 
     const browser = await chromium.launch({
-        headless: false,
+        headless: process.env.HEADLESS === 'true' ? true : false,
         args: [
             '--start-maximized',
             '--disable-blink-features=AutomationControlled',

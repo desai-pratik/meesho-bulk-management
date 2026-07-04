@@ -162,7 +162,7 @@ async function runFetcher() {
     }
 
     const browser = await chromium.launch({
-        headless: false, // You can set this to true later if you want it completely silent
+        headless: process.env.HEADLESS === 'true' ? true : false,
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
     });
 

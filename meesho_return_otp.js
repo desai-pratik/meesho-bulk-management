@@ -229,7 +229,7 @@ async function runFetcher() {
     }
     console.log(`Found ${accounts.length} accounts to fetch Return OTPs for.`);
     const browser = await chromium.launch({
-        headless: false,
+        headless: process.env.HEADLESS === 'true' ? true : false,
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
     });
 

@@ -534,7 +534,19 @@ app.post('/api/stop/:scriptName', (req, res) => {
     res.status(404).json({ error: 'Script is not running' });
 });
 
-const PORT = 3001;
+// Serve built static frontend files
+app.use(express.static(path.join(__dirname, 'frontend/dist')));
+
+// Fallback all routes to index.html for client-side routing (React Router)
+app.get('*any', (req, res, next) => {
+    // If request starts with /api or is for static folders, skip to let express handle it/return 404
+    if (req.path.startsWith('/api') || req.path.startsWith('/single_catalog_images') || req.path.startsWith('/error_screenshots')) {
+        return next();
+    }
+    res.sendFile(path.join(__dirname, 'frontend/dist', 'index.html'));
+});
+
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`Backend server running on http://localhost:${PORT}`);
 });
