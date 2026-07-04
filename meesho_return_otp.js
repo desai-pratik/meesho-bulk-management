@@ -99,18 +99,18 @@ async function fetchReturnOTPs(browser, account) {
 
     try {
         console.log(`[${username}] Navigating to Meesho...`);
-        await page.goto(LOGIN_URL, { timeout: 30000 });
+        await page.goto(LOGIN_URL, { timeout: 3000 });
 
         const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        await emailInput.waitFor({ state: 'visible', timeout: 30000 });
+        await emailInput.waitFor({ state: 'visible', timeout: 3000 });
 
         console.log(`[${username}] Logging in...`);
         await emailInput.fill(username);
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
         await page.getByRole('button', { name: 'Log in', exact: true }).click();
-        
-        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
-        await page.waitForTimeout(3000);
+
+        try { await page.waitForLoadState('networkidle', { timeout: 1000 }); } catch (e) { }
+        await page.waitForTimeout(300);
 
         // Close any popups that might intercept clicks
         await clearDashboard(page);
@@ -119,16 +119,16 @@ async function fetchReturnOTPs(browser, account) {
         console.log(`[${username}] Navigating to Returns tab...`);
         try {
             const returnsLink = page.getByText('Returns', { exact: true }).first();
-            await returnsLink.waitFor({ timeout: 10000 });
+            await returnsLink.waitFor({ timeout: 1000 });
             await returnsLink.click({ force: true });
-            await page.waitForTimeout(2000);
-            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => { });
-            await page.waitForTimeout(5000);
+            await page.waitForTimeout(200);
+            await page.waitForLoadState('networkidle', { timeout: 1000 }).catch(() => { });
+            await page.waitForTimeout(1000);
         } catch (err) {
             console.log(`[${username}] Could not find Returns tab, trying direct URL...`);
-            await page.goto('https://supplier.meesho.com/panel/v3/new/returns', { timeout: 30000 });
-            await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => { });
-            await page.waitForTimeout(6000);
+            await page.goto('https://supplier.meesho.com/panel/v3/new/returns', { timeout: 3000 });
+            await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => { });
+            await page.waitForTimeout(600);
         }
 
         // Check for "View more OTPs"
@@ -137,7 +137,7 @@ async function fetchReturnOTPs(browser, account) {
             if (await viewMoreBtn.isVisible()) {
                 console.log(`[${username}] Found "View more OTPs", clicking...`);
                 await viewMoreBtn.click({ force: true });
-                await page.waitForTimeout(2000); // Wait for popup to open
+                await page.waitForTimeout(200); // Wait for popup to open
             }
         } catch (err) { }
 
@@ -206,13 +206,11 @@ async function fetchReturnOTPs(browser, account) {
             updateReturnOTPs(username, extractedData);
             console.log(`[${username}] SUCCESS! Extracted OTPs:`, extractedData);
         } else {
-            console.log(`[${username}] No OTPs found on the page (or OTP section not visible).`);
+            console.log(`[${username}] No OTPs found on the page (or OTP section not visible). Keep old OTPs.`);
             // Save HTML for debugging
             const html = await page.content();
             fs.writeFileSync(path.join(__dirname, 'returns_debug.html'), html);
             console.log(`[${username}] Saved page HTML to returns_debug.html for debugging.`);
-            // Clear existing OTPs for this account since none were found
-            updateReturnOTPs(username, {});
         }
 
     } catch (e) {
@@ -230,15 +228,6 @@ async function runFetcher() {
         return;
     }
     console.log(`Found ${accounts.length} accounts to fetch Return OTPs for.`);
-
-    // Clear old OTPs before starting the sync
-    try {
-        fs.writeFileSync(OTPS_FILE, JSON.stringify([]));
-        console.log("Cleared old return_otps.json");
-    } catch (e) {
-        console.error("Failed to clear old OTPs:", e.message);
-    }
-
     const browser = await chromium.launch({
         headless: false,
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
@@ -248,16 +237,9 @@ async function runFetcher() {
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
-
-        await Promise.all(batch.map(account => 
+        await Promise.all(batch.map(account =>
             asyncLocalStorage.run(account.username, () => fetchReturnOTPs(browser, account))
         ));
-
-        if (i + BATCH_SIZE < accounts.length) {
-            console.log("Batch complete. Waiting 8-12 seconds before next batch to prevent rate-limiting...");
-            const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
-            await new Promise(r => setTimeout(r, delay));
-        }
     }
 
     console.log("\n=== RETURN OTPS FETCH COMPLETED ===");

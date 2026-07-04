@@ -170,14 +170,7 @@ async function runFetcher() {
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
-
         await Promise.all(batch.map(account => fetchAccountStats(browser, account)));
-
-        if (i + BATCH_SIZE < accounts.length) {
-            console.log("Batch complete. Waiting 8-12 seconds before next batch to prevent rate-limiting...");
-            const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
-            await new Promise(r => setTimeout(r, delay));
-        }
     }
 
     console.log("\n=== ALL STATS FETCHED SUCESSFULLY ===");
