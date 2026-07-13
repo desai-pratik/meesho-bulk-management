@@ -72,8 +72,7 @@ function Notifications() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertTriangle color="var(--danger)" />
-          Error Notifications
+          Notifications
           {errors.length > 0 && <span style={{ background: 'var(--danger)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.9rem' }}>{errors.length}</span>}
         </h2>
         <div style={{ display: 'flex', alignItems: "center", gap: "20px" }}>

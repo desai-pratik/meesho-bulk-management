@@ -485,8 +485,22 @@ app.post('/api/run/:scriptName', (req, res) => {
         
         const startTime = Date.now();
         
-        const child = spawn(process.execPath, [scriptName], { cwd: __dirname, env });
+        const child = spawn(process.execPath, ['-r', './screencast_helper.js', scriptName], { 
+            cwd: __dirname, 
+            env,
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc'] 
+        });
         activeProcesses.set(scriptName, { child, startTime });
+
+        child.on('message', (message) => {
+            if (message && message.type === 'screencast') {
+                io.emit('screencast', {
+                    script: scriptName,
+                    image: message.image,
+                    url: message.url
+                });
+            }
+        });
 
         child.stdout.on('data', (data) => {
             const msg = data.toString();

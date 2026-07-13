@@ -5,6 +5,7 @@ import { Terminal, Users, PlayCircle } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import AccountsManager from './components/AccountsManager';
 import LiveLogsTerminal from './components/LiveLogsTerminal';
+import LiveBrowserFeed from './components/LiveBrowserFeed';
 import FileManager from './components/FileManager';
 import ReturnOTPs from './components/ReturnOTPs';
 import InventoryUpdatesManager from './components/InventoryUpdatesManager';
@@ -53,7 +54,22 @@ function App() {
 
     // Listen for logs
     socket.on('log', (data) => {
-      setLogs(prev => [...prev, data].slice(-200)); // keep last 200 logs
+      if (data && typeof data.message === 'string') {
+        const lines = data.message.split('\n');
+        const formattedLogs = lines
+          .map(line => line.trimEnd())
+          .filter(line => line.trim().length > 0)
+          .map(line => ({
+            script: data.script,
+            type: data.type,
+            message: line,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+          }));
+
+        if (formattedLogs.length > 0) {
+          setLogs(prev => [...prev, ...formattedLogs].slice(-300)); // keep last 300 logs
+        }
+      }
     });
 
     // Listen for status changes
@@ -190,7 +206,7 @@ function App() {
             <Route path="/dashboard" element={
               <>
                 <Dashboard scripts={scripts} onTrigger={triggerScript} />
-                <LiveLogsTerminal logs={logs} />
+                <LiveBrowserFeed socket={socket} scripts={scripts} logs={logs} />
               </>
             } />
 
