@@ -366,7 +366,7 @@ async function runBot() {
     console.log(`Loaded ${accounts.length} accounts.`);
 
     const browser = await chromium.launch({
-        headless: false,
+        headless: process.env.HEADLESS === 'true' ? true : false,
         args: [
             '--start-maximized',
             '--disable-blink-features=AutomationControlled', // Disable bot detection feature

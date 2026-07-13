@@ -149,7 +149,7 @@ async function updateInventoryForAccount(browser, account, updates) {
         await page.getByRole('textbox', { name: 'Email Id or mobile number' }).fill(username);
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
         await page.getByRole('button', { name: 'Log in', exact: true }).click();
-        
+
         try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
         await clearDashboard(page);
 
@@ -164,14 +164,14 @@ async function updateInventoryForAccount(browser, account, updates) {
         for (const update of updates) {
             const { sku, stock } = update;
             console.log(`[${username}] Processing SKU: ${sku} -> Stock: ${stock}`);
-            
+
             try {
                 // Search for SKU
-                const searchBox = page.getByPlaceholder(/search by/i).first(); 
+                const searchBox = page.getByPlaceholder(/search by/i).first();
                 await searchBox.waitFor({ state: 'visible', timeout: 10000 });
-                await searchBox.fill(''); 
+                await searchBox.fill('');
                 await searchBox.fill(sku);
-                
+
                 // Wait for and click the SKU in the dropdown
                 const dropdownItem = page.getByText(`Style ID/SKU: ${sku}`, { exact: false });
                 try {
@@ -181,20 +181,20 @@ async function updateInventoryForAccount(browser, account, updates) {
                     console.log(`  > Dropdown for ${sku} did not appear. Pressing Enter...`);
                     await page.keyboard.press('Enter');
                 }
-                
+
                 await page.waitForTimeout(4000); // Wait for table to load
 
                 // Find the row for the specific SKU
                 const skuRow = page.locator('tr').filter({ hasText: sku }).first();
-                
+
                 if (await skuRow.isVisible()) {
                     // Try to find the Current Stock container or just the input/pencil
                     // The user said: "click pencil icon and update stock and click outside"
-                    
+
                     // Look for the SVG/Pencil inside the stock column or row
                     const stockColumn = skuRow.locator('td').last(); // Often the last column
                     let pencilIcon = skuRow.locator('svg').last(); // Pencil is usually an SVG
-                    
+
                     // Click the pencil icon to make the input editable
                     if (await pencilIcon.isVisible()) {
                         await pencilIcon.click({ force: true });
@@ -210,28 +210,28 @@ async function updateInventoryForAccount(browser, account, updates) {
 
                     // Now find the text/number input field (exclude checkboxes and radios)
                     let stockInput = skuRow.locator('input:not([type="checkbox"]):not([type="radio"])').first();
-                    
+
                     if (await stockInput.isVisible()) {
                         // Fill Stock
                         await stockInput.click({ force: true });
                         await page.waitForTimeout(200);
                         await page.keyboard.press('Control+A');
                         await page.keyboard.press('Backspace');
-                        
+
                         // Use type to ensure the input registers the change
                         await stockInput.type(stock.toString(), { delay: 50 });
                         await page.waitForTimeout(500);
-                        
+
                         console.log(`  > Stock filled: ${stock}. Pressing Enter and clicking outside to save...`);
-                        
+
                         // Press Enter which often saves inline edits
                         await page.keyboard.press('Enter');
                         await page.waitForTimeout(1000);
-                        
+
                         // Click outside (e.g., on the page body) to trigger save
                         await page.locator('body').click({ force: true, position: { x: 0, y: 0 } });
                         await page.waitForTimeout(2000); // Wait for the save request to process
-                        
+
                         // Success Check: Green popup or success message
                         try {
                             const successMsg = page.getByText(/successfully|updated|saved/i);
@@ -254,7 +254,7 @@ async function updateInventoryForAccount(browser, account, updates) {
                     await logBotError(path.basename(__filename), username, errMsg, page, sku);
                     results.push({ sku, status: 'Failed', reason: errMsg });
                 }
-                
+
                 // Reset search for next SKU by clearing search box
                 try {
                     await searchBox.fill('');
@@ -289,7 +289,7 @@ async function runBot() {
     console.log(`Loaded ${accounts.length} accounts and ${updates.length} SKU stock updates.`);
 
     const browser = await chromium.launch({
-        headless: false,
+        headless: process.env.HEADLESS === 'true' ? true : false,
         args: [
             '--start-maximized',
             '--disable-blink-features=AutomationControlled',

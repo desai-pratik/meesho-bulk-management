@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, NavLink } from 'react-router-dom';
 import { Plus, Trash2, Save, Tags } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 function InventoryUpdatesManager() {
   const { type } = useParams();
@@ -13,7 +14,7 @@ function InventoryUpdatesManager() {
     setLoading(true);
     setSelectedIds([]);
     const endpoint = mode === 'price' ? '/api/inventory-updates' : '/api/inventory-stock-updates';
-    fetch(`http://localhost:3001${endpoint}`)
+    fetch(`${BACKEND_URL}${endpoint}`)
       .then(res => res.json())
       .then(data => {
         // Normalize the data so it always uses 'value' for the input field
@@ -79,7 +80,7 @@ function InventoryUpdatesManager() {
         .filter(u => u.sku && u.value)
         .map(u => mode === 'price' ? { sku: u.sku, price: u.value } : { sku: u.sku, stock: u.value });
 
-      const res = await fetch(`http://localhost:3001${endpoint}`, {
+      const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates: payload })

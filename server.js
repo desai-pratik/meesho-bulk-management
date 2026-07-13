@@ -71,7 +71,7 @@ app.get('/api/accounts', (req, res) => {
         }
         const csv = fs.readFileSync(getAccountsPath(), 'utf8');
         const lines = csv.split('\n').filter(l => l.trim().length > 0);
-        
+
         let accounts = [];
         // Assuming first line might be header or might not be.
         // Let's just treat everything as "username,password"
@@ -79,9 +79,9 @@ app.get('/api/accounts', (req, res) => {
             if (line.startsWith('username,')) continue; // skip header if exists
             const [username, password, name, isActive] = line.split(',');
             if (username && password) {
-                accounts.push({ 
-                    username: username.trim(), 
-                    password: password.trim(), 
+                accounts.push({
+                    username: username.trim(),
+                    password: password.trim(),
                     name: name ? name.trim() : '',
                     isActive: isActive ? isActive.trim() === 'true' : true
                 });
@@ -99,12 +99,12 @@ app.post('/api/accounts', (req, res) => {
         if (!Array.isArray(accounts)) {
             return res.status(400).json({ error: 'Accounts should be an array' });
         }
-        
+
         let csvContent = 'username,password,name,isActive\n';
         for (let acc of accounts) {
             csvContent += `${acc.username},${acc.password},${acc.name || ''},${acc.isActive !== false}\n`;
         }
-        
+
         fs.writeFileSync(getAccountsPath(), csvContent, 'utf8');
         res.json({ success: true });
     } catch (e) {
@@ -143,12 +143,12 @@ app.post('/api/inventory-updates', (req, res) => {
         if (!Array.isArray(updates)) {
             return res.status(400).json({ error: 'Updates should be an array' });
         }
-        
+
         let csvContent = 'sku,price\n';
         for (let update of updates) {
             csvContent += `${update.sku},${update.price}\n`;
         }
-        
+
         fs.writeFileSync(getInventoryUpdatesPath(), csvContent, 'utf8');
         res.json({ success: true });
     } catch (e) {
@@ -187,12 +187,12 @@ app.post('/api/inventory-stock-updates', (req, res) => {
         if (!Array.isArray(updates)) {
             return res.status(400).json({ error: 'Updates should be an array' });
         }
-        
+
         let csvContent = 'sku,stock\n';
         for (let update of updates) {
             csvContent += `${update.sku},${update.stock}\n`;
         }
-        
+
         fs.writeFileSync(getInventoryStockUpdatesPath(), csvContent, 'utf8');
         res.json({ success: true });
     } catch (e) {
@@ -283,7 +283,7 @@ app.delete('/api/single-catalog-images/:filename', (req, res) => {
         const { filename } = req.params;
         const sanitizedFilename = path.basename(filename);
         const filepath = path.join(getSingleCatalogImagesPath(), sanitizedFilename);
-        
+
         if (fs.existsSync(filepath)) {
             fs.unlinkSync(filepath);
             res.json({ success: true, message: 'Image deleted' });
@@ -330,7 +330,7 @@ app.delete('/api/files/:filename', (req, res) => {
         // prevent directory traversal attacks
         const sanitizedFilename = path.basename(filename);
         const filepath = path.join(getUploadsPath(), sanitizedFilename);
-        
+
         if (fs.existsSync(filepath)) {
             fs.unlinkSync(filepath);
             res.json({ success: true, message: 'File deleted' });
@@ -436,15 +436,15 @@ app.get('/api/scripts', (req, res) => {
     try {
         const files = fs.readdirSync(__dirname);
         const scripts = files.filter(f => f.startsWith('meesho_') && f.endsWith('.js'));
-        
+
         const scriptInfo = scripts.map(s => {
             let name = s.replace('meesho_', '').replace('.js', '').replace(/_/g, ' ');
             // capitalize
             name = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            
+
             const isRunning = activeProcesses.has(s);
             const proc = isRunning ? activeProcesses.get(s) : null;
-            
+
             return {
                 filename: s,
                 name: name,
@@ -452,7 +452,7 @@ app.get('/api/scripts', (req, res) => {
                 startTime: proc ? proc.startTime : null
             };
         });
-        
+
         res.json(scriptInfo);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -462,12 +462,12 @@ app.get('/api/scripts', (req, res) => {
 app.post('/api/run/:scriptName', (req, res) => {
     const { scriptName } = req.params;
     const { account } = req.body || {};
-    
+
     // basic validation
     if (!scriptName.startsWith('meesho_') || !scriptName.endsWith('.js')) {
         return res.status(400).json({ error: 'Invalid script name' });
     }
-    
+
     const scriptPath = path.join(__dirname, scriptName);
     if (!fs.existsSync(scriptPath)) {
         return res.status(404).json({ error: 'Script not found' });
@@ -479,16 +479,17 @@ app.post('/api/run/:scriptName', (req, res) => {
 
     try {
         const env = Object.assign({}, process.env);
+        delete env.NODE_OPTIONS;
         if (account) {
             env.TARGET_ACCOUNT = account;
         }
-        
+
         const startTime = Date.now();
-        
-        const child = spawn(process.execPath, ['-r', './screencast_helper.js', scriptName], { 
-            cwd: __dirname, 
+
+        const child = spawn(process.execPath, ['-r', './screencast_helper.js', scriptName], {
+            cwd: __dirname,
             env,
-            stdio: ['pipe', 'pipe', 'pipe', 'ipc'] 
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc']
         });
         activeProcesses.set(scriptName, { child, startTime });
 
@@ -521,10 +522,10 @@ app.post('/api/run/:scriptName', (req, res) => {
             io.emit('processStatus', { script: scriptName, status: 'stopped' });
         });
 
-        io.emit('processStatus', { 
-            script: scriptName, 
-            status: 'running', 
-            startTime 
+        io.emit('processStatus', {
+            script: scriptName,
+            status: 'running',
+            startTime
         });
         res.json({ success: true, message: 'Script started' });
     } catch (e) {
@@ -534,7 +535,7 @@ app.post('/api/run/:scriptName', (req, res) => {
 
 app.post('/api/stop/:scriptName', (req, res) => {
     const { scriptName } = req.params;
-    
+
     if (activeProcesses.has(scriptName)) {
         const proc = activeProcesses.get(scriptName);
         proc.child.kill('SIGTERM');
@@ -543,11 +544,23 @@ app.post('/api/stop/:scriptName', (req, res) => {
         io.emit('processStatus', { script: scriptName, status: 'stopped' });
         return res.json({ success: true, message: 'Script stopped' });
     }
-    
+
     res.status(404).json({ error: 'Script is not running' });
 });
 
-const PORT = 3001;
+// Serve built static frontend files
+app.use(express.static(path.join(__dirname, 'frontend/dist')));
+
+// Fallback all routes to index.html for client-side routing (React Router)
+app.get('*any', (req, res, next) => {
+    // If request starts with /api or is for static folders, skip to let express handle it/return 404
+    if (req.path.startsWith('/api') || req.path.startsWith('/single_catalog_images') || req.path.startsWith('/error_screenshots')) {
+        return next();
+    }
+    res.sendFile(path.join(__dirname, 'frontend/dist', 'index.html'));
+});
+
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`Backend server running on http://localhost:${PORT}`);
 });

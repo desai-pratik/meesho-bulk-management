@@ -639,7 +639,7 @@ async function runBot() {
         return;
     }
     
-    const browser = await chromium.launch({ headless: false, args: ['--start-maximized'] });
+    const browser = await chromium.launch({ headless: process.env.HEADLESS === 'true' ? true : false, args: ['--start-maximized'] });
     
     for (const acc of accounts) {
         await asyncLocalStorage.run(acc.username, () => processAccount(browser, acc, groups, defaults));

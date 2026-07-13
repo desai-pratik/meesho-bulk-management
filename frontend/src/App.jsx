@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { Terminal, Users, PlayCircle } from 'lucide-react';
+import { BACKEND_URL } from './config';
 import Dashboard from './components/Dashboard';
 import AccountsManager from './components/AccountsManager';
 import LiveLogsTerminal from './components/LiveLogsTerminal';
@@ -14,7 +15,7 @@ import Notifications from './components/Notifications';
 import { FolderUp, KeyRound, Tags, Settings, Menu, X, UserCircle, Bell } from 'lucide-react';
 
 // Connect to backend server on port 3001
-const socket = io('http://localhost:3001');
+const socket = io(BACKEND_URL);
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -25,7 +26,7 @@ function App() {
   const [errorCount, setErrorCount] = useState(0);
 
   const fetchErrorsCount = () => {
-    fetch('http://localhost:3001/api/errors')
+    fetch(`${BACKEND_URL}/api/errors`)
       .then(res => res.json())
       .then(data => setErrorCount(data ? data.length : 0))
       .catch(err => console.error("Error fetching notifications:", err));
@@ -33,18 +34,18 @@ function App() {
 
   useEffect(() => {
     // Fetch initial scripts
-    fetch('http://localhost:3001/api/scripts')
+    fetch(`${BACKEND_URL}/api/scripts`)
       .then(res => res.json())
       .then(data => setScripts(data))
       .catch(err => console.error("Error fetching scripts:", err));
 
     // Fetch initial file count
-    fetch('http://localhost:3001/api/files')
+    fetch(`${BACKEND_URL}/api/files`)
       .then(res => res.json())
       .then(data => setFileCount(data.length))
       .catch(err => console.error("Error fetching files:", err));
 
-    fetch('http://localhost:3001/api/accounts')
+    fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
       .then(data => setAccountCount(data.filter(a => a.isActive !== false).length))
       .catch(err => console.error("Error fetching accounts:", err));
@@ -102,7 +103,7 @@ function App() {
         bodyData = JSON.stringify({ account: action.account });
       }
 
-      const res = await fetch(`http://localhost:3001${endpoint}`, {
+      const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: bodyData ? { 'Content-Type': 'application/json' } : undefined,
         body: bodyData

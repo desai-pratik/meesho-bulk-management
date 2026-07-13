@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Search } from 'lucide-react';
 import BotCard from './BotCard';
+import { BACKEND_URL } from '../config';
 
 function Dashboard({ scripts, onTrigger }) {
   const [stats, setStats] = useState([]);
@@ -21,7 +22,7 @@ function Dashboard({ scripts, onTrigger }) {
   };
 
   const fetchStats = () => {
-    fetch('http://localhost:3001/api/stats')
+    fetch(`${BACKEND_URL}/api/stats`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -34,7 +35,7 @@ function Dashboard({ scripts, onTrigger }) {
   };
 
   const fetchAccounts = () => {
-    fetch('http://localhost:3001/api/accounts')
+    fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
       .then(data => setAccounts(data))
       .catch(err => console.error("Error fetching accounts:", err));

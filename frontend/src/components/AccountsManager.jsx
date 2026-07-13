@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, Search } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 function AccountsManager({ scripts, onTrigger }) {
   const [accounts, setAccounts] = useState([]);
@@ -7,7 +8,7 @@ function AccountsManager({ scripts, onTrigger }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/accounts')
+    fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
       .then(data => {
         setAccounts(data);
@@ -41,7 +42,7 @@ function AccountsManager({ scripts, onTrigger }) {
 
   const saveAccounts = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/accounts', {
+      const res = await fetch(`${BACKEND_URL}/api/accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accounts: accounts.filter(a => a.username && a.password) })

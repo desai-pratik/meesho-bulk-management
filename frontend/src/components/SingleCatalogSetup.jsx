@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, NavLink } from 'react-router-dom';
 import { Save, Image as ImageIcon, Search, Trash2, UploadCloud } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 function SingleCatalogSetup({ socket }) {
   const { category } = useParams();
@@ -34,7 +35,7 @@ function SingleCatalogSetup({ socket }) {
   const [previewImage, setPreviewImage] = useState(null);
 
   const fetchImages = () => {
-    fetch('http://localhost:3001/api/single-catalog-images')
+    fetch(`${BACKEND_URL}/api/single-catalog-images`)
       .then(res => res.json())
       .then(data => {
         setImages(data);
@@ -45,7 +46,7 @@ function SingleCatalogSetup({ socket }) {
 
   const fetchDefaults = () => {
     setLoading(true);
-    fetch(`http://localhost:3001/api/single-catalog-defaults?category=${activeCategory}&t=${Date.now()}`)
+    fetch(`${BACKEND_URL}/api/single-catalog-defaults?category=${activeCategory}&t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         if (data && Object.keys(data).length > 0) {
@@ -73,7 +74,7 @@ function SingleCatalogSetup({ socket }) {
 
   const handleSave = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/single-catalog-defaults?category=${activeCategory}`, {
+      const res = await fetch(`${BACKEND_URL}/api/single-catalog-defaults?category=${activeCategory}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -99,7 +100,7 @@ function SingleCatalogSetup({ socket }) {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/api/single-catalog-images', {
+      const res = await fetch(`${BACKEND_URL}/api/single-catalog-images`, {
         method: 'POST',
         body: fd
       });
@@ -116,7 +117,7 @@ function SingleCatalogSetup({ socket }) {
   const handleDeleteImage = async (filename) => {
     if (!window.confirm(`Delete ${filename}?`)) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/single-catalog-images/${filename}`, { method: 'DELETE' });
+      const res = await fetch(`${BACKEND_URL}/api/single-catalog-images/${filename}`, { method: 'DELETE' });
       if (res.ok) fetchImages();
     } catch (error) {
       console.error(error);
@@ -126,7 +127,7 @@ function SingleCatalogSetup({ socket }) {
   const handleDeleteAll = async () => {
     if (!window.confirm('Are you sure you want to delete ALL uploaded photos?')) return;
     try {
-      const res = await fetch('http://localhost:3001/api/single-catalog-images', { method: 'DELETE' });
+      const res = await fetch(`${BACKEND_URL}/api/single-catalog-images`, { method: 'DELETE' });
       if (res.ok) fetchImages();
     } catch (error) {
       console.error(error);
@@ -145,7 +146,7 @@ function SingleCatalogSetup({ socket }) {
     if (!window.confirm(`Are you sure you want to delete the ${selectedImages.length} selected photos?`)) return;
     try {
       const deletePromises = selectedImages.map(filename =>
-        fetch(`http://localhost:3001/api/single-catalog-images/${filename}`, { method: 'DELETE' })
+        fetch(`${BACKEND_URL}/api/single-catalog-images/${filename}`, { method: 'DELETE' })
       );
       await Promise.all(deletePromises);
       setSelectedImages([]);
@@ -302,7 +303,7 @@ function SingleCatalogSetup({ socket }) {
                     </button>
                     <div className="photo-card-img-wrapper">
                       <img
-                        src={`http://localhost:3001/single_catalog_images/${encodeURIComponent(img.name)}`}
+                        src={`${BACKEND_URL}/single_catalog_images/${encodeURIComponent(img.name)}`}
                         alt={img.name}
                         className="photo-card-img"
                         onError={(e) => {
@@ -483,7 +484,7 @@ function SingleCatalogSetup({ socket }) {
             <div className="modal-body">
               <div className="modal-image-container">
                 <img
-                  src={`http://localhost:3001/single_catalog_images/${encodeURIComponent(previewImage.name)}`}
+                  src={`${BACKEND_URL}/single_catalog_images/${encodeURIComponent(previewImage.name)}`}
                   alt={previewImage.name}
                   className="modal-image"
                 />

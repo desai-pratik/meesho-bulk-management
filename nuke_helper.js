@@ -5,7 +5,7 @@ async function injectBackgroundPoller(page) {
             if (window.__nukePollerIntervalActive) return;
             window.__nukePollerIntervalActive = true;
             
-            setInterval(() => {
+            const runNuke = () => {
                 try {
                     const els = Array.from(document.querySelectorAll('div, span, button, a, img, svg, p, h4, h2'));
                     for (const el of els) {
@@ -15,7 +15,7 @@ async function injectBackgroundPoller(page) {
                         if (el.attributes) {
                             for (let j = 0; j < el.attributes.length; j++) {
                                 const val = el.attributes[j].value || '';
-                                if (val.includes('cross-black.svg') || val.includes('cross-grey.svg') || val.includes('cross-white.svg')) {
+                                if (/cross[-_](black|grey|gray|white)\.svg/.test(val)) {
                                     hasSvg = true;
                                     break;
                                 }
@@ -26,7 +26,7 @@ async function injectBackgroundPoller(page) {
                         if (!hasSvg) {
                             const computedStyle = window.getComputedStyle(el);
                             const bgImg = computedStyle.backgroundImage || '';
-                            if (bgImg.includes('cross-black.svg') || bgImg.includes('cross-grey.svg') || bgImg.includes('cross-white.svg')) {
+                            if (/cross[-_](black|grey|gray|white)\.svg/.test(bgImg)) {
                                   hasSvg = true;
                             }
                         }
@@ -56,7 +56,11 @@ async function injectBackgroundPoller(page) {
                         }
                     }
                 } catch(err) {}
-            }, 500); // Check every 500ms
+            };
+
+            // Run immediately, then poll every 100ms for responsive cleanup
+            runNuke();
+            setInterval(runNuke, 100);
         };
 
         // 1. Inject on current page immediately
@@ -116,7 +120,7 @@ async function nukePopups(page) {
                     if (el.attributes) {
                         for (let j = 0; j < el.attributes.length; j++) {
                             const val = el.attributes[j].value || '';
-                            if (val.includes('cross-black.svg') || val.includes('cross-grey.svg') || val.includes('cross-white.svg')) {
+                            if (/cross[-_](black|grey|gray|white)\.svg/.test(val)) {
                                 hasSvg = true;
                                 break;
                             }
@@ -127,7 +131,7 @@ async function nukePopups(page) {
                     if (!hasSvg) {
                         const computedStyle = window.getComputedStyle(el);
                         const bgImg = computedStyle.backgroundImage || '';
-                        if (bgImg.includes('cross-black.svg') || bgImg.includes('cross-grey.svg') || bgImg.includes('cross-white.svg')) {
+                        if (/cross[-_](black|grey|gray|white)\.svg/.test(bgImg)) {
                             hasSvg = true;
                         }
                     }
@@ -261,25 +265,7 @@ async function nukePopups(page) {
 async function clearDashboard(page) {
     try {
         console.log("  > Checking for dashboard ads/popups...");
-        await page.waitForTimeout(1000);
-
-        let popupsHandled = 0;
-        // Try up to 4 times
-        for (let i = 0; i < 4; i++) {
-            const nukeResult = await nukePopups(page);
-            if (nukeResult && nukeResult.actionTaken) {
-                popupsHandled++;
-                await page.waitForTimeout(500); // Wait for animations
-            } else {
-                break;
-            }
-        }
-
-        if (popupsHandled > 0) {
-            console.log(`  > Dashboard popups detected and cleared (Handled: ${popupsHandled}).`);
-        } else {
-            console.log("  > No dashboard ads/popups found. Proceeding.");
-        }
+        await nukePopups(page);
     } catch (e) {
         console.log("  > Error in clearDashboard: " + e.message);
     }

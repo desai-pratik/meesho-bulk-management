@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, Play, Search } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 function ReturnOTPs({ scripts, onTrigger }) {
   const [otps, setOtps] = useState([]);
@@ -17,14 +18,14 @@ function ReturnOTPs({ scripts, onTrigger }) {
   }, [isSyncing]);
 
   const fetchOtps = () => {
-    fetch('http://localhost:3001/api/return-otps')
+    fetch(`${BACKEND_URL}/api/return-otps`)
       .then(res => res.json())
       .then(data => setOtps(data))
       .catch(err => console.error("Error fetching return OTPs:", err));
   };
 
   const fetchAccounts = () => {
-    fetch('http://localhost:3001/api/accounts')
+    fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
       .then(data => setAccounts(data))
       .catch(err => console.error("Error fetching accounts:", err));

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { UploadCloud, File, Trash2 } from 'lucide-react';
+import { BACKEND_URL } from '../config';
 
 function FileManager({ onUpdateFileCount }) {
   const [files, setFiles] = useState([]);
@@ -8,7 +9,7 @@ function FileManager({ onUpdateFileCount }) {
   const fileInputRef = useRef(null);
 
   const fetchFiles = () => {
-    fetch('http://localhost:3001/api/files')
+    fetch(`${BACKEND_URL}/api/files`)
       .then(res => res.json())
       .then(data => {
         setFiles(data);
@@ -33,7 +34,7 @@ function FileManager({ onUpdateFileCount }) {
 
     setUploading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/files', {
+      const res = await fetch(`${BACKEND_URL}/api/files`, {
         method: 'POST',
         body: formData,
       });
@@ -56,7 +57,7 @@ function FileManager({ onUpdateFileCount }) {
     if (!confirm(`Are you sure you want to delete ${filename}?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/files/${encodeURIComponent(filename)}`, {
+      const res = await fetch(`${BACKEND_URL}/api/files/${encodeURIComponent(filename)}`, {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -92,7 +93,7 @@ function FileManager({ onUpdateFileCount }) {
 
     try {
       const deletePromises = selectedFiles.map(filename =>
-        fetch(`http://localhost:3001/api/files/${encodeURIComponent(filename)}`, {
+        fetch(`${BACKEND_URL}/api/files/${encodeURIComponent(filename)}`, {
           method: 'DELETE'
         }).then(res => res.json())
       );

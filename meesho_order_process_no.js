@@ -451,7 +451,7 @@ async function runBot() {
     console.log(`Labels will be saved to: ${DOWNLOAD_PATH}`);
 
     const browser = await chromium.launch({
-        headless: false,
+        headless: process.env.HEADLESS === 'true' ? true : false,
         args: [
             '--start-maximized',
             '--disable-blink-features=AutomationControlled', // Disable bot detection feature
