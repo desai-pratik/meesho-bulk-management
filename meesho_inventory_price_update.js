@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
-const { logBotError } = require('./logger');
+const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
@@ -256,9 +256,11 @@ async function updateInventoryForAccount(browser, account, updates) {
                             await successMsg.waitFor({ state: 'visible', timeout: 10000 });
                             console.log(`[${username}] ✅ SKU ${sku} update request submitted.`);
                             results.push({ sku, status: 'Success' });
+                            await logBotSuccess(path.basename(__filename), username, `SKU ${sku} update request submitted successfully.`, sku);
                         } catch (e) {
                             console.log(`  > Success message not detected, but request was submitted.`);
                             results.push({ sku, status: 'Success (Check Portal)', info: 'Submitted but no confirmation seen' });
+                            await logBotSuccess(path.basename(__filename), username, `SKU ${sku} update request submitted (but no confirmation seen).`, sku);
                         }
                     } else {
                         const errMsg = `Could not find Price input for SKU ${sku}`;

@@ -2,6 +2,7 @@ const { chromium } = require('playwright');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
 const fs = require('fs');
 const path = require('path');
+const { logBotError, logBotSuccess } = require('./logger');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -205,6 +206,7 @@ async function fetchReturnOTPs(browser, account) {
         if (Object.keys(extractedData).length > 0) {
             updateReturnOTPs(username, extractedData);
             console.log(`[${username}] SUCCESS! Extracted OTPs:`, extractedData);
+            await logBotSuccess(path.basename(__filename), username, `Extracted OTPs successfully: ${JSON.stringify(extractedData)}`);
         } else {
             console.log(`[${username}] No OTPs found on the page (or OTP section not visible). Keep old OTPs.`);
             // Save HTML for debugging
@@ -215,6 +217,7 @@ async function fetchReturnOTPs(browser, account) {
 
     } catch (e) {
         console.log(`[${username}] ERROR: ${e.message}`);
+        await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
     } finally {
         console.log(`[${username}] Closing session...`);
         await context.close();

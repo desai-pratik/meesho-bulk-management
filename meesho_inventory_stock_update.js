@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
-const { logBotError } = require('./logger');
+const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
@@ -238,9 +238,11 @@ async function updateInventoryForAccount(browser, account, updates) {
                             await successMsg.waitFor({ state: 'visible', timeout: 5000 });
                             console.log(`[${username}] ✅ SKU ${sku} stock updated successfully.`);
                             results.push({ sku, status: 'Success' });
+                            await logBotSuccess(path.basename(__filename), username, `SKU ${sku} stock updated successfully.`, sku);
                         } catch (e) {
                             console.log(`  > Success message not detected, but clicked outside to save.`);
                             results.push({ sku, status: 'Success (Check Portal)', info: 'Assumed saved after click outside' });
+                            await logBotSuccess(path.basename(__filename), username, `SKU ${sku} stock updated (Assumed saved after click outside).`, sku);
                         }
                     } else {
                         const errMsg = `Could not find inline Stock input for SKU ${sku}`;

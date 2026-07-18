@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trash2, AlertTriangle, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { Trash2, AlertTriangle, ExternalLink, RefreshCw, Search, CheckCircle } from 'lucide-react';
 import { BACKEND_URL } from '../config';
 
 function Notifications() {
@@ -42,19 +42,19 @@ function Notifications() {
   }, []);
 
   const clearAll = async () => {
-    if (!window.confirm("Are you sure you want to clear all error notifications?")) return;
+    if (!window.confirm("Are you sure you want to clear all notifications?")) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/errors`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) setErrors([]);
     } catch (e) {
       console.error(e);
-      alert("Failed to clear errors");
+      alert("Failed to clear notifications");
     }
   };
 
   const deleteSingleError = async (index) => {
-    if (!window.confirm("Are you sure you want to delete this error notification?")) return;
+    if (!window.confirm("Are you sure you want to delete this notification?")) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/errors/${index}`, { method: 'DELETE' });
       const data = await res.json();
@@ -63,7 +63,7 @@ function Notifications() {
       }
     } catch (e) {
       console.error(e);
-      alert("Failed to delete error");
+      alert("Failed to delete notification");
     }
   };
 
@@ -74,7 +74,17 @@ function Notifications() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
           Notifications
-          {errors.length > 0 && <span style={{ background: 'var(--danger)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.9rem' }}>{errors.length}</span>}
+          {errors.length > 0 && (
+            <span style={{ 
+              background: errors.some(e => e.type !== 'success') ? 'var(--danger)' : 'var(--success)', 
+              color: 'white', 
+              padding: '2px 8px', 
+              borderRadius: '12px', 
+              fontSize: '0.9rem' 
+            }}>
+              {errors.length}
+            </span>
+          )}
         </h2>
         <div style={{ display: 'flex', alignItems: "center", gap: "20px" }}>
           {errors.length > 0 && (
@@ -128,8 +138,8 @@ function Notifications() {
 
       {errors.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-          <AlertTriangle size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-          <h3>No errors found!</h3>
+          <CheckCircle size={48} style={{ margin: '0 auto 1rem', opacity: 0.5, color: 'var(--success)' }} />
+          <h3>No notifications found!</h3>
           <p>Your bots are running smoothly.</p>
         </div>
       ) : filteredErrors.length === 0 ? (
@@ -140,56 +150,75 @@ function Notifications() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {filteredErrors.map((err) => (
-            <div key={err.originalIndex} className="glass-panel" style={{ borderLeft: '4px solid var(--danger)', display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{err.bot}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      {new Date(err.timestamp).toLocaleString()}
-                    </span>
-                    <button
-                      onClick={() => deleteSingleError(err.originalIndex)}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '0', display: 'flex' }}
-                      title="Delete this error"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+          {filteredErrors.map((err) => {
+            const isSuccess = err.type === 'success';
+            const borderCol = isSuccess ? 'var(--success)' : 'var(--danger)';
+            const msgBg = isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,50,50,0.1)';
+            return (
+              <div key={err.originalIndex} className="glass-panel" style={{ borderLeft: `4px solid ${borderCol}`, display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{err.bot}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        {new Date(err.timestamp).toLocaleString()}
+                      </span>
+                      <button
+                        onClick={() => deleteSingleError(err.originalIndex)}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '0', display: 'flex' }}
+                        title="Delete this notification"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
-                    Account: <strong>{err.account}</strong>
-                  </span>
-                  {err.sku && (
-                    <span style={{ background: 'rgba(255,165,0,0.1)', color: 'orange', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '600' }}>
-                      SKU: {err.sku}
+                  <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
+                      Account: <strong>{err.account}</strong>
                     </span>
-                  )}
+                    {err.sku && (
+                      <span style={{ background: 'rgba(255,165,0,0.1)', color: 'orange', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '600' }}>
+                        SKU: {err.sku}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ 
+                    color: 'var(--text-color)', 
+                    background: msgBg, 
+                    padding: '10px', 
+                    borderRadius: '6px', 
+                    fontSize: '0.95rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {isSuccess ? (
+                      <CheckCircle size={16} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                    ) : (
+                      <AlertTriangle size={16} style={{ color: 'var(--danger)', flexShrink: 0 }} />
+                    )}
+                    <span>{err.message}</span>
+                  </p>
                 </div>
-                <p style={{ color: 'var(--text-color)', background: 'rgba(255,50,50,0.1)', padding: '10px', borderRadius: '6px', fontSize: '0.95rem' }}>
-                  {err.message}
-                </p>
-              </div>
 
-              {err.screenshot && (
-                <div
-                  style={{ width: '150px', height: '100px', cursor: 'pointer', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' }}
-                  onClick={() => setSelectedImage(`${BACKEND_URL}/error_screenshots/${err.screenshot}`)}
-                >
-                  <img
-                    src={`${BACKEND_URL}/error_screenshots/${err.screenshot}`}
-                    alt="Error Screenshot"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.75rem', textAlign: 'center', padding: '2px' }}>
-                    Click to Enlarge
+                {err.screenshot && (
+                  <div
+                    style={{ width: '150px', height: '100px', cursor: 'pointer', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' }}
+                    onClick={() => setSelectedImage(`${BACKEND_URL}/error_screenshots/${err.screenshot}`)}
+                  >
+                    <img
+                      src={`${BACKEND_URL}/error_screenshots/${err.screenshot}`}
+                      alt="Error Screenshot"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '0.75rem', textAlign: 'center', padding: '2px' }}>
+                      Click to Enlarge
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

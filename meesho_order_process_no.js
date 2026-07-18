@@ -1,4 +1,4 @@
-const { logBotError } = require('./logger');
+const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -413,6 +413,7 @@ async function processAccount(browser, account) {
                 await download.saveAs(downloadPath);
                 console.log(`[${username}] SUCCESS: Labels downloaded to ${downloadPath}`);
                 labelDownloaded = true;
+                await logBotSuccess(path.basename(__filename), username, `Labels downloaded successfully to ${path.basename(downloadPath)}`);
 
             } catch (e) {
                 console.log(`[${username}] Expected UI flow for 'Label' generation failed or no ready to ship orders: ${e.message}`);

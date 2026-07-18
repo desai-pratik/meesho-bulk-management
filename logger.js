@@ -29,6 +29,7 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
             sku: sku,
             message: errorMessage,
             screenshot: screenshotSaved ? filename : null,
+            type: 'error',
             timestamp: new Date().toISOString()
         });
         
@@ -38,4 +39,27 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
     }
 }
 
-module.exports = { logBotError };
+async function logBotSuccess(botName, username, successMessage, sku = null) {
+    try {
+        const errorsPath = path.join(__dirname, 'errors.json');
+        let errors = [];
+        if (fs.existsSync(errorsPath)) {
+            try { errors = JSON.parse(fs.readFileSync(errorsPath, 'utf8')); } catch (e) {}
+        }
+        
+        errors.unshift({ // Add to top
+            bot: botName,
+            account: username,
+            sku: sku,
+            message: successMessage,
+            type: 'success',
+            timestamp: new Date().toISOString()
+        });
+        
+        fs.writeFileSync(errorsPath, JSON.stringify(errors, null, 2));
+    } catch (e) {
+        console.error("Failed to log bot success:", e.message);
+    }
+}
+
+module.exports = { logBotError, logBotSuccess };

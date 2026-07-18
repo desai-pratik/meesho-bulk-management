@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
-const { logBotError } = require('./logger');
+const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
@@ -604,6 +604,7 @@ async function processAccount(browser, account, groups, defaults) {
                 
                 await page.waitForTimeout(5000); // Wait for success
                 results.push({ sku: group.sku, status: 'Success' });
+                await logBotSuccess(path.basename(__filename), username, `Single catalog upload submitted successfully for SKU group: ${group.sku}`, group.sku);
                 
             } catch (e) {
                 console.error(`  ! Error on ${group.sku}:`, e.message);

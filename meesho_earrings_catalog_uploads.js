@@ -1,4 +1,4 @@
-const { logBotError } = require('./logger');
+const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -324,6 +324,7 @@ async function processAccount(browser, account, uploadFiles) {
                 await page.waitForTimeout(30000); // Reduced to 10s
 
                 fileResults.push({ file: fileName, status: 'Success' });
+                await logBotSuccess(path.basename(__filename), username, `Uploaded bulk catalog file successfully: ${fileName}`);
 
             } catch (e) {
                 console.error(`[${username}] Failed to upload ${fileName}: ${e.message}`);
