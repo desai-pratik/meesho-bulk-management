@@ -11,13 +11,29 @@ function LiveBrowserFeed({ socket, scripts, logs }) {
 
   // Check if any script is currently running
   const runningScript = scripts?.find(s => s.isRunning);
-  const filteredLogs = logs?.filter(log => !runningScript || log.script === runningScript.filename) || [];
+  const [lastActiveScript, setLastActiveScript] = useState(null);
+
+  useEffect(() => {
+    if (runningScript) {
+      setLastActiveScript(runningScript);
+    }
+  }, [runningScript]);
+
+  // Determine which script to show logs for
+  const displayScript = runningScript || lastActiveScript || (logs && logs.length > 0 ? scripts?.find(s => s.filename === logs[logs.length - 1].script) : null);
+
+  const filteredLogs = logs?.filter(log => {
+    if (displayScript) {
+      return log.script === displayScript.filename;
+    }
+    return true;
+  }) || [];
 
   useEffect(() => {
     if (terminalEndRef.current) {
       terminalEndRef.current.scrollTop = terminalEndRef.current.scrollHeight;
     }
-  }, [logs, isTerminalCollapsed]);
+  }, [filteredLogs, isTerminalCollapsed]);
 
   useEffect(() => {
     if (!socket) return;
@@ -302,7 +318,7 @@ function LiveBrowserFeed({ socket, scripts, logs }) {
           )}
 
           {/* Absolute overlay terminal */}
-          {runningScript && (
+          {(runningScript || displayScript || filteredLogs.length > 0) && (
             <div className={`overlay-terminal ${isTerminalCollapsed ? 'collapsed' : 'expanded'}`}>
               {/* Header */}
               <div className="overlay-terminal-header" onClick={() => setIsTerminalCollapsed(!isTerminalCollapsed)}>
@@ -311,15 +327,15 @@ function LiveBrowserFeed({ socket, scripts, logs }) {
                     width: '6px',
                     height: '6px',
                     borderRadius: '50%',
-                    background: '#10b981',
-                    boxShadow: '0 0 8px #10b981',
-                    animation: 'pulse 1.5s infinite'
+                    background: runningScript ? '#10b981' : '#64748b',
+                    boxShadow: runningScript ? '0 0 8px #10b981' : 'none',
+                    animation: runningScript ? 'pulse 1.5s infinite' : 'none'
                   }} />
                   <Terminal size={12} style={{ color: 'var(--primary)' }} />
                   <span>Terminal Output</span>
-                  {runningScript && (
+                  {displayScript && (
                     <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.7rem' }}>
-                      — {runningScript.name}
+                      — {displayScript.name} {!runningScript && '(Finished)'}
                     </span>
                   )}
                 </div>
