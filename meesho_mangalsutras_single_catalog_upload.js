@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
+const { connectDB } = require('./db');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -20,7 +21,6 @@ console.log = (...args) => {
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const IMAGES_DIR = path.join(__dirname, 'single_catalog_images');
-const DEFAULTS_FILE = path.join(__dirname, 'single_catalog_mangalsutras_defaults.json');
 
 // Helper to read accounts
 function getAccounts() {
@@ -62,13 +62,15 @@ function getImageGroups() {
 }
 
 // Helper to get defaults
-function getDefaults() {
+async function getDefaults() {
     try {
-        if (fs.existsSync(DEFAULTS_FILE)) {
-            return JSON.parse(fs.readFileSync(DEFAULTS_FILE, 'utf8'));
+        const db = await connectDB();
+        const record = await db.collection('catalog_defaults').findOne({ category: 'mangalsutras' });
+        if (record && record.defaults) {
+            return record.defaults;
         }
     } catch (e) {
-        console.error("Error reading single_catalog_mangalsutras_defaults.json:", e.message);
+        console.error("Error reading defaults from MongoDB:", e.message);
     }
     return {};
 }
@@ -624,7 +626,7 @@ async function processAccount(browser, account, groups, defaults) {
 async function runBot() {
     const accounts = getAccounts();
     const groups = getImageGroups();
-    const defaults = getDefaults();
+    const defaults = await getDefaults();
     
     if (groups.length === 0) {
         console.log("No images found in single_catalog_images directory.");

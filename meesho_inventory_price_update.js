@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
+const { connectDB } = require('./db');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -23,35 +24,23 @@ const ACCOUNTS_FILE = 'accounts.csv';
 const UPDATES_FILE = 'inventory_updates.csv';
 
 // Helper to read accounts
-function getAccounts() {
+async function getAccounts() {
     try {
-        const csv = fs.readFileSync('accounts.csv', 'utf8');
-        const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
-        return lines.map(line => {
-            const [username, password, name, isActive] = line.split(',');
-            return { username, password, name, isActive: isActive ? isActive.trim() === 'true' : true };
-        }).filter(acc => acc.isActive);
+        const db = await connectDB();
+        return await db.collection('accounts').find({ isActive: true }).toArray();
     } catch (e) {
-        console.error("Error reading accounts.csv:", e.message);
+        console.error("Error reading accounts from MongoDB:", e.message);
         return [];
     }
 }
 
 // Helper to read inventory updates
-function getInventoryUpdates() {
+async function getInventoryUpdates() {
     try {
-        if (!fs.existsSync(UPDATES_FILE)) {
-            console.error(`Error: ${UPDATES_FILE} not found.`);
-            return [];
-        }
-        const csv = fs.readFileSync(UPDATES_FILE, 'utf8');
-        const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('sku,'));
-        return lines.map(line => {
-            const [sku, price] = line.split(',');
-            return { sku, price };
-        });
+        const db = await connectDB();
+        return await db.collection('inventory_price_updates').find({}).toArray();
     } catch (e) {
-        console.error(`Error reading ${UPDATES_FILE}:`, e.message);
+        console.error("Error reading inventory updates from MongoDB:", e.message);
         return [];
     }
 }
@@ -301,8 +290,8 @@ async function updateInventoryForAccount(browser, account, updates) {
 }
 
 async function runBot() {
-    const accounts = getAccounts();
-    const updates = getInventoryUpdates();
+    const accounts = await getAccounts();
+    const updates = await getInventoryUpdates();
 
     if (accounts.length === 0) { console.error("No accounts found."); return; }
     if (updates.length === 0) { console.error("No inventory updates found."); return; }

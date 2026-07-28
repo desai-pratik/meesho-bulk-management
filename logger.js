@@ -1,5 +1,5 @@
-const fs = require('fs');
 const path = require('path');
+const { connectDB } = require('./db');
 
 async function logBotError(botName, username, errorMessage, page, sku = null) {
     try {
@@ -17,13 +17,7 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
             }
         }
         
-        const errorsPath = path.join(__dirname, 'errors.json');
-        let errors = [];
-        if (fs.existsSync(errorsPath)) {
-            try { errors = JSON.parse(fs.readFileSync(errorsPath, 'utf8')); } catch (e) {}
-        }
-        
-        errors.unshift({ // Add to top
+        const logEntry = {
             bot: botName,
             account: username,
             sku: sku,
@@ -31,9 +25,15 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
             screenshot: screenshotSaved ? filename : null,
             type: 'error',
             timestamp: new Date().toISOString()
-        });
-        
-        fs.writeFileSync(errorsPath, JSON.stringify(errors, null, 2));
+        };
+
+        // Write to MongoDB only
+        try {
+            const db = await connectDB();
+            await db.collection('errors').insertOne(logEntry);
+        } catch (dbErr) {
+            console.error("Failed to log error to MongoDB:", dbErr.message);
+        }
     } catch (e) {
         console.error("Failed to log bot error:", e.message);
     }
@@ -41,22 +41,22 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
 
 async function logBotSuccess(botName, username, successMessage, sku = null) {
     try {
-        const errorsPath = path.join(__dirname, 'errors.json');
-        let errors = [];
-        if (fs.existsSync(errorsPath)) {
-            try { errors = JSON.parse(fs.readFileSync(errorsPath, 'utf8')); } catch (e) {}
-        }
-        
-        errors.unshift({ // Add to top
+        const logEntry = {
             bot: botName,
             account: username,
             sku: sku,
             message: successMessage,
             type: 'success',
             timestamp: new Date().toISOString()
-        });
-        
-        fs.writeFileSync(errorsPath, JSON.stringify(errors, null, 2));
+        };
+
+        // Write to MongoDB only
+        try {
+            const db = await connectDB();
+            await db.collection('errors').insertOne(logEntry);
+        } catch (dbErr) {
+            console.error("Failed to log success to MongoDB:", dbErr.message);
+        }
     } catch (e) {
         console.error("Failed to log bot success:", e.message);
     }
