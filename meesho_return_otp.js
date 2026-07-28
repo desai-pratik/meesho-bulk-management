@@ -3,6 +3,7 @@ const { nukePopups, clearDashboard } = require('./nuke_helper');
 const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
+const { connectDB } = require('./db');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -19,33 +20,28 @@ console.log = (...args) => {
 
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const ACCOUNTS_FILE = path.join(__dirname, 'accounts.csv');
-const OTPS_FILE = path.join(__dirname, 'return_otps.json');
-
-function updateReturnOTPs(username, extractedOtps) {
+async function updateReturnOTPs(username, extractedOtps) {
     try {
-        let otps = [];
-        if (fs.existsSync(OTPS_FILE)) {
-            try {
-                otps = JSON.parse(fs.readFileSync(OTPS_FILE, 'utf8'));
-            } catch (err) { }
-        }
-
+        const db = await connectDB();
+        const otpsColl = db.collection('return_otps');
         // Remove old entries for this account
-        otps = otps.filter(o => o.account !== username);
-
+        await otpsColl.deleteMany({ account: username });
+        
         // Add new entries
+        const toInsert = [];
         for (const [courier, otp] of Object.entries(extractedOtps)) {
-            otps.push({
+            toInsert.push({
                 account: username,
                 courier: courier,
                 otp: otp,
                 timestamp: new Date().toISOString()
             });
         }
-
-        fs.writeFileSync(OTPS_FILE, JSON.stringify(otps, null, 2));
+        if (toInsert.length > 0) {
+            await otpsColl.insertMany(toInsert);
+        }
     } catch (e) {
-        console.error("Error updating return OTPs:", e.message);
+        console.error("Error updating return OTPs in MongoDB:", e.message);
     }
 }
 
@@ -204,7 +200,7 @@ async function fetchReturnOTPs(browser, account) {
         });
 
         if (Object.keys(extractedData).length > 0) {
-            updateReturnOTPs(username, extractedData);
+            await updateReturnOTPs(username, extractedData);
             console.log(`[${username}] SUCCESS! Extracted OTPs:`, extractedData);
             await logBotSuccess(path.basename(__filename), username, `Extracted OTPs successfully: ${JSON.stringify(extractedData)}`);
         } else {

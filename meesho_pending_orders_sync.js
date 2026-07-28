@@ -3,6 +3,7 @@ const { nukePopups, clearDashboard } = require('./nuke_helper');
 const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
+const { connectDB } = require('./db');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -19,21 +20,17 @@ console.log = (...args) => {
 
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const ACCOUNTS_FILE = path.join(__dirname, 'accounts.csv');
-const STATS_FILE = path.join(__dirname, 'pending_orders_overview_data.json');
-
 // Helper to save order stats
-function updateOrderStats(username, pendingCount) {
+async function updateOrderStats(username, pendingCount) {
     try {
-        let stats = {};
-        if (fs.existsSync(STATS_FILE)) {
-            try {
-                stats = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8'));
-            } catch (err) {}
-        }
-        stats[username] = pendingCount;
-        fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2));
+        const db = await connectDB();
+        await db.collection('stats').updateOne(
+            { account: username },
+            { $set: { pendingOrders: pendingCount, timestamp: new Date().toISOString() } },
+            { upsert: true }
+        );
     } catch (e) {
-        console.error("Error updating order stats:", e.message);
+        console.error("Error updating order stats in MongoDB:", e.message);
     }
 }
 
@@ -132,7 +129,7 @@ async function fetchAccountStats(browser, account) {
         });
 
         if (count !== null) {
-            updateOrderStats(username, count);
+            await updateOrderStats(username, count);
             console.log(`[${username}] SUCCESS! Recorded ${count} pending orders.`);
             await logBotSuccess(path.basename(__filename), username, `Recorded ${count} pending orders successfully.`);
         } else {
@@ -158,10 +155,11 @@ async function runFetcher() {
 
     // Clear old stats before starting the sync
     try {
-        fs.writeFileSync(STATS_FILE, JSON.stringify({}));
-        console.log("Cleared old pending_orders_overview_data.json");
+        const db = await connectDB();
+        await db.collection('stats').deleteMany({});
+        console.log("Cleared old pending orders stats in MongoDB.");
     } catch (e) {
-        console.error("Failed to clear old stats:", e.message);
+        console.error("Failed to clear old stats in MongoDB:", e.message);
     }
 
     const browser = await chromium.launch({

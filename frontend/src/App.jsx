@@ -51,7 +51,6 @@ function App() {
       .catch(err => console.error("Error fetching accounts:", err));
 
     fetchErrorsCount();
-    const errorInterval = setInterval(fetchErrorsCount, 5000);
 
     // Listen for logs
     socket.on('log', (data) => {
@@ -89,7 +88,6 @@ function App() {
     return () => {
       socket.off('log');
       socket.off('processStatus');
-      clearInterval(errorInterval);
     };
   }, []);
 

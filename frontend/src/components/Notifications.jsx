@@ -37,8 +37,6 @@ function Notifications() {
 
   useEffect(() => {
     fetchErrors();
-    const interval = setInterval(fetchErrors, 5000); // Poll every 5s
-    return () => clearInterval(interval);
   }, []);
 
   const clearAll = async () => {
