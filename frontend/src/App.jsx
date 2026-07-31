@@ -13,12 +13,29 @@ import InventoryUpdatesManager from './components/InventoryUpdatesManager';
 import SingleCatalogSetup from './components/SingleCatalogSetup';
 import Notifications from './components/Notifications';
 import ScanPack from './components/ScanPack';
-import { FolderUp, KeyRound, Tags, Settings, Menu, X, UserCircle, Bell, Scan } from 'lucide-react';
+import LoginRegister from './components/LoginRegister';
+import UserProfile from './components/UserProfile';
+import { FolderUp, KeyRound, Tags, Settings, Menu, X, UserCircle, Bell, Scan, LogOut } from 'lucide-react';
 
 // Connect to backend server on port 3001
 const socket = io(BACKEND_URL);
 
+// Monkeypatch fetch globally to inject JWT Authorization header
+const originalFetch = window.fetch;
+window.fetch = async (url, options = {}) => {
+  const token = localStorage.getItem('token');
+  if (token && (url.startsWith(BACKEND_URL) || url.startsWith('/api') || url.includes('/api/'))) {
+    options.headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`
+    };
+  }
+  return originalFetch(url, options);
+};
+
 function App() {
+  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [user, setUser] = useState(localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [logs, setLogs] = useState([]);
   const [scripts, setScripts] = useState([]);
@@ -26,29 +43,45 @@ function App() {
   const [accountCount, setAccountCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
 
+  const handleLoginSuccess = (newToken, newUser) => {
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setToken('');
+    setUser(null);
+  };
+
   const fetchErrorsCount = () => {
     fetch(`${BACKEND_URL}/api/errors`)
       .then(res => res.json())
-      .then(data => setErrorCount(data ? data.length : 0))
+      .then(data => setErrorCount(Array.isArray(data) ? data.length : 0))
       .catch(err => console.error("Error fetching notifications:", err));
   };
 
   useEffect(() => {
+    if (!token) return;
+
     // Fetch initial scripts
     fetch(`${BACKEND_URL}/api/scripts`)
       .then(res => res.json())
-      .then(data => setScripts(data))
+      .then(data => setScripts(Array.isArray(data) ? data : []))
       .catch(err => console.error("Error fetching scripts:", err));
 
     // Fetch initial file count
     fetch(`${BACKEND_URL}/api/files`)
       .then(res => res.json())
-      .then(data => setFileCount(data.length))
+      .then(data => setFileCount(Array.isArray(data) ? data.length : 0))
       .catch(err => console.error("Error fetching files:", err));
 
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
-      .then(data => setAccountCount(data.filter(a => a.isActive !== false).length))
+      .then(data => setAccountCount(Array.isArray(data) ? data.filter(a => a.isActive !== false).length : 0))
       .catch(err => console.error("Error fetching accounts:", err));
 
     fetchErrorsCount();
@@ -90,7 +123,7 @@ function App() {
       socket.off('log');
       socket.off('processStatus');
     };
-  }, []);
+  }, [token]);
 
   const triggerScript = async (filename, action = 'start') => {
     try {
@@ -117,6 +150,10 @@ function App() {
     }
   };
 
+  if (!token) {
+    return <LoginRegister onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="app-container">
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
@@ -135,11 +172,11 @@ function App() {
             <PlayCircle size={18} /> Dashboard
           </NavLink>
           <NavLink
-            to="/accounts"
+            to="/meesho-accounts"
             className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             onClick={() => setIsSidebarOpen(false)}
           >
-            <Users size={18} /> Accounts {accountCount > 0 && <span style={{ background: 'rgb(248, 0, 0)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', position: 'absolute', top: '14px', right: '14px' }}>{accountCount}</span>}
+            <Users size={18} /> Meesho Account {accountCount > 0 && <span style={{ background: 'rgb(248, 0, 0)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', position: 'absolute', top: '14px', right: '14px' }}>{accountCount}</span>}
           </NavLink>
           <NavLink
             to="/files"
@@ -198,11 +235,16 @@ function App() {
             </button>
             <h2 className="mobile-only-title">Sync Hub</h2>
           </div>
-          <div className="header-right">
-            <div className="user-profile">
-              <UserCircle size={20} />
-              <span className="user-name">Admin</span>
-            </div>
+          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <NavLink to="/profile" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div className="user-profile">
+                <UserCircle size={20} />
+                <span className="user-name">{user?.name || 'Admin'}</span>
+              </div>
+            </NavLink>
+            {/* <button className="btn btn-danger" onClick={handleLogout} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
+              <LogOut size={14} /> Logout
+            </button> */}
           </div>
         </header>
 
@@ -217,8 +259,14 @@ function App() {
               </>
             } />
 
-            <Route path="/accounts" element={
+            <Route path="/meesho-accounts" element={
               <AccountsManager scripts={scripts} onTrigger={triggerScript} />
+            } />
+
+            <Route path="/accounts" element={<Navigate to="/meesho-accounts" replace />} />
+
+            <Route path="/profile" element={
+              <UserProfile onProfileUpdate={handleLoginSuccess} onLogout={handleLogout} />
             } />
 
             <Route path="/files" element={

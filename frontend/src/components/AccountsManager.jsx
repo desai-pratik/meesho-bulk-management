@@ -63,7 +63,7 @@ function AccountsManager({ scripts, onTrigger }) {
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 85px)', overflow: 'hidden', paddingRight: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
-        <h2 style={{ fontSize: '1.4rem' }}>Manage Accounts</h2>
+        <h2 style={{ fontSize: '1.4rem' }}>Manage Meesho Accounts</h2>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />

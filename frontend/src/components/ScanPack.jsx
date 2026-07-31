@@ -153,9 +153,14 @@ function ScanPack() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/sku-mappings/stats`);
       const data = await res.json();
-      setMappingStats(data);
+      if (data && typeof data.totalMappings === 'number') {
+        setMappingStats(data);
+      } else {
+        setMappingStats({ totalMappings: 0, lastImport: null });
+      }
     } catch (err) {
       console.error("Error fetching SKU mapping stats:", err);
+      setMappingStats({ totalMappings: 0, lastImport: null });
     }
   };
 
@@ -844,7 +849,7 @@ function ScanPack() {
                 <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Total SKU Mappings</div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: 'white', marginTop: '3px' }}>
-                    {mappingStats.totalMappings.toLocaleString()} SKUs
+                    {(mappingStats?.totalMappings ?? 0).toLocaleString()} SKUs
                   </div>
                 </div>
 

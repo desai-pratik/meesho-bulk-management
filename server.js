@@ -1,3 +1,10 @@
+require('dotenv').config();
+
+// Polyfill missing browser globals for pdf-parse
+global.DOMMatrix = class DOMMatrix {};
+global.ImageData = class ImageData {};
+global.Path2D = class Path2D {};
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -9,6 +16,9 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const XLSX = require('xlsx');
 const { connectDB } = require('./db');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -305,6 +315,402 @@ async function initializeDB() {
         console.error("Failed to initialize database or perform migration:", e.message);
     }
 }
+
+// --- AUTHENTICATION CONFIG & MIDDLEWARE ---
+
+const JWT_SECRET = process.env.JWT_SECRET || 'meesho-sync-hub-secret-key-super-secure';
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+
+// Helper to send email OTP
+async function sendOTPEmail(email, otp) {
+    if (!SMTP_USER || !SMTP_PASS) {
+        console.log(`[AUTH OTP DEV FALLBACK] SMTP is not configured. OTP for ${email} is: ${otp}`);
+        return { success: true, fallback: true };
+    }
+
+    const transporter = nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_PORT === 465,
+        auth: {
+            user: SMTP_USER,
+            pass: SMTP_PASS
+        }
+    });
+
+    const mailOptions = {
+        from: `"Meesho Sync Hub" <${SMTP_USER}>`,
+        to: email,
+        subject: 'Meesho Sync Hub OTP Verification Code',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #0f111a; color: #f8fafc; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
+                <h2 style="background: linear-gradient(to right, #6366f1, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; margin-bottom: 20px;">Meesho Sync Hub</h2>
+                <p>Hello,</p>
+                <p>Use the following 6-digit verification code to complete your request:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 2.5rem; font-weight: bold; letter-spacing: 6px; padding: 10px 20px; background: rgba(255,255,255,0.08); border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); color: #ec4899;">${otp}</span>
+                </div>
+                <p>This code is valid for 5 minutes. Do not share this code with anyone.</p>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.08); margin: 30px 0;">
+                <p style="font-size: 0.8rem; color: #94a3b8; text-align: center;">© 2026 Meesho Sync Hub. All rights reserved.</p>
+            </div>
+        `
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+}
+
+// JWT Token Authentication Middleware
+function authenticateToken(req, res, next) {
+    if (req.path.startsWith('/auth/') || req.path.startsWith('/api/auth/')) {
+        return next();
+    }
+
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Access denied: No token provided' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+        req.user = user;
+        next();
+    });
+}
+
+// Register authentication verification middleware for all api routes
+app.use('/api', authenticateToken);
+
+// --- AUTHENTICATION ROUTES ---
+
+// Register User
+app.post('/api/auth/register', async (req, res) => {
+    const { email, password, name } = req.body;
+    if (!email || !password || !name) {
+        return res.status(400).json({ error: 'All fields (email, password, name) are required' });
+    }
+
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const existingUser = await usersColl.findOne({ email: email.toLowerCase().trim() });
+        if (existingUser && existingUser.isVerified) {
+            return res.status(400).json({ error: 'User with this email already exists' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+        const userData = {
+            email: email.toLowerCase().trim(),
+            password: hashedPassword,
+            name: name.trim(),
+            isVerified: false,
+            otp,
+            otpExpiry,
+            createdAt: new Date()
+        };
+
+        if (existingUser) {
+            await usersColl.updateOne({ email: email.toLowerCase().trim() }, { $set: userData });
+        } else {
+            await usersColl.insertOne(userData);
+        }
+
+        const sendResult = await sendOTPEmail(userData.email, otp);
+
+        res.json({ 
+            success: true, 
+            message: 'Verification OTP sent to your email',
+            fallback: sendResult.fallback || false
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Verify OTP
+app.post('/api/auth/verify-otp', async (req, res) => {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+        return res.status(400).json({ error: 'Email and OTP are required' });
+    }
+
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const user = await usersColl.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(400).json({ error: 'User not found' });
+        }
+
+        if (user.otp !== otp) {
+            return res.status(400).json({ error: 'Invalid verification code' });
+        }
+
+        if (new Date() > new Date(user.otpExpiry)) {
+            return res.status(400).json({ error: 'Verification code has expired' });
+        }
+
+        await usersColl.updateOne(
+            { email: email.toLowerCase().trim() },
+            { 
+                $set: { isVerified: true },
+                $unset: { otp: "", otpExpiry: "" }
+            }
+        );
+
+        const token = jwt.sign(
+            { email: user.email, name: user.name },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            message: 'Account verified successfully',
+            token,
+            user: { email: user.email, name: user.name }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const user = await usersColl.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
+
+        if (!user.isVerified) {
+            return res.status(400).json({ error: 'Account is not verified. Please register again to get a new code.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Invalid email or password' });
+        }
+
+        const token = jwt.sign(
+            { email: user.email, name: user.name },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            message: 'Logged in successfully',
+            token,
+            user: { email: user.email, name: user.name }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Resend OTP
+app.post('/api/auth/resend-otp', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+    }
+
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const user = await usersColl.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(400).json({ error: 'User not found' });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+        await usersColl.updateOne(
+            { email: email.toLowerCase().trim() },
+            { $set: { otp, otpExpiry } }
+        );
+
+        const sendResult = await sendOTPEmail(user.email, otp);
+
+        res.json({ 
+            success: true, 
+            message: 'Verification OTP sent to your email',
+            fallback: sendResult.fallback || false
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Password Reset Request
+app.post('/api/auth/reset-password-request', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+    }
+
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const user = await usersColl.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(400).json({ error: 'User with this email does not exist' });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+        await usersColl.updateOne(
+            { email: email.toLowerCase().trim() },
+            { $set: { otp, otpExpiry } }
+        );
+
+        const sendResult = await sendOTPEmail(user.email, otp);
+
+        res.json({ 
+            success: true, 
+            message: 'Password reset OTP sent to your email',
+            fallback: sendResult.fallback || false
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Password Reset Confirm
+app.post('/api/auth/reset-password-confirm', async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+        return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+    }
+
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const user = await usersColl.findOne({ email: email.toLowerCase().trim() });
+        if (!user) {
+            return res.status(400).json({ error: 'User not found' });
+        }
+
+        if (user.otp !== otp) {
+            return res.status(400).json({ error: 'Invalid reset code' });
+        }
+
+        if (new Date() > new Date(user.otpExpiry)) {
+            return res.status(400).json({ error: 'Reset code has expired' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        await usersColl.updateOne(
+            { email: email.toLowerCase().trim() },
+            { 
+                $set: { password: hashedPassword, isVerified: true },
+                $unset: { otp: "", otpExpiry: "" }
+            }
+        );
+
+        res.json({ success: true, message: 'Password updated successfully. You can now login.' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Get Current User Profile
+app.get('/api/profile', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+        const user = await usersColl.findOne({ email: req.user.email });
+        if (!user) {
+            return res.status(404).json({ error: 'User profile not found' });
+        }
+        res.json({
+            success: true,
+            user: {
+                name: user.name,
+                email: user.email,
+                createdAt: user.createdAt
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Update Profile
+app.post('/api/profile/update', async (req, res) => {
+    const { name, password } = req.body;
+    try {
+        const db = await connectDB();
+        const usersColl = db.collection('users');
+
+        const updateData = {};
+        if (name && name.trim()) {
+            updateData.name = name.trim();
+        }
+        if (password && password.trim()) {
+            if (password.trim().length < 6) {
+                return res.status(400).json({ error: 'Password must be at least 6 characters' });
+            }
+            updateData.password = await bcrypt.hash(password, 10);
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        await usersColl.updateOne(
+            { email: req.user.email },
+            { $set: updateData }
+        );
+
+        // Fetch updated user to return
+        const updatedUser = await usersColl.findOne({ email: req.user.email });
+
+        // Generate a new token with updated name
+        const token = jwt.sign(
+            { email: updatedUser.email, name: updatedUser.name },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            token,
+            user: { email: updatedUser.email, name: updatedUser.name }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // --- API ENDPOINTS ---
 

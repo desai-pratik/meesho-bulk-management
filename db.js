@@ -8,8 +8,19 @@ let db = null;
 async function connectDB() {
     if (db) return db;
     if (!client) {
-        client = new MongoClient(MONGODB_URI);
-        await client.connect();
+        try {
+            client = new MongoClient(MONGODB_URI);
+            await client.connect();
+            // Ping database to verify connection and handshake succeed
+            await client.db('admin').command({ ping: 1 });
+        } catch (err) {
+            if (client) {
+                await client.close().catch(() => {});
+            }
+            client = null;
+            db = null;
+            throw err;
+        }
     }
     db = client.db('meesho_bulk_management');
     return db;
