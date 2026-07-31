@@ -12,7 +12,8 @@ import ReturnOTPs from './components/ReturnOTPs';
 import InventoryUpdatesManager from './components/InventoryUpdatesManager';
 import SingleCatalogSetup from './components/SingleCatalogSetup';
 import Notifications from './components/Notifications';
-import { FolderUp, KeyRound, Tags, Settings, Menu, X, UserCircle, Bell } from 'lucide-react';
+import ScanPack from './components/ScanPack';
+import { FolderUp, KeyRound, Tags, Settings, Menu, X, UserCircle, Bell, Scan } from 'lucide-react';
 
 // Connect to backend server on port 3001
 const socket = io(BACKEND_URL);
@@ -169,6 +170,13 @@ function App() {
             <Settings size={18} /> Single Catalog Setup
           </NavLink>
           <NavLink
+            to="/scan-pack"
+            className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <Scan size={18} /> Scan & Pack
+          </NavLink>
+          <NavLink
             to="/notifications"
             className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             onClick={() => setIsSidebarOpen(false)}
@@ -229,6 +237,10 @@ function App() {
             <Route path="/single-catalog" element={<Navigate to="/single-catalog/jewellery-set" replace />} />
             <Route path="/single-catalog/:category" element={
               <SingleCatalogSetup socket={socket} />
+            } />
+
+            <Route path="/scan-pack" element={
+              <ScanPack />
             } />
 
             <Route path="/notifications" element={
