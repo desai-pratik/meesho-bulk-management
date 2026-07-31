@@ -6,6 +6,8 @@ const { spawn } = require('child_process');
 const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const XLSX = require('xlsx');
 const { connectDB } = require('./db');
 
 const app = express();
@@ -13,6 +15,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/single_catalog_images', express.static(path.join(__dirname, 'single_catalog_images')));
 app.use('/error_screenshots', express.static(path.join(__dirname, 'error_screenshots')));
+app.use('/product_images', express.static(path.join(__dirname, 'product_images')));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -34,6 +37,16 @@ const getUploadsPath = () => {
 };
 const getSingleCatalogImagesPath = () => {
     const dir = path.join(__dirname, 'single_catalog_images');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+};
+const getProductImagesPath = () => {
+    const dir = path.join(__dirname, 'product_images');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+};
+const getUploadedPdfsPath = () => {
+    const dir = path.join(__dirname, 'uploaded_pdfs');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     return dir;
 };
@@ -76,6 +89,28 @@ const imageStorage = multer.diskStorage({
     }
 });
 const uploadImage = multer({ storage: imageStorage });
+
+// Multer Config for SKU Product Images
+const skuImageStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, getProductImagesPath());
+    },
+    filename: function (req, file, cb) {
+        cb(null, file.originalname);
+    }
+});
+const uploadSkuImage = multer({ storage: skuImageStorage });
+
+// Multer Config for Meesho Label PDFs
+const pdfStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, getUploadedPdfsPath());
+    },
+    filename: function (req, file, cb) {
+        cb(null, file.originalname);
+    }
+});
+const uploadPdf = multer({ storage: pdfStorage });
 
 // --- DATABASE SYNC & INITIALIZATION LAYER ---
 
@@ -254,6 +289,14 @@ async function initializeDB() {
                     }
                 } catch (e) {}
             }
+        }
+
+        // 7. Ensure Indexes for SKU Mapping
+        try {
+            await db.collection('sku_mappings').createIndex({ sku: 1 }, { unique: true });
+            console.log("MongoDB sku_mappings index verified/created.");
+        } catch (idxErr) {
+            console.warn("Index check failed or already exists:", idxErr.message);
         }
 
         await syncLocalCacheFiles();
@@ -480,6 +523,469 @@ app.delete('/api/single-catalog-images/:filename', (req, res) => {
         } else {
             res.status(404).json({ error: 'Image not found' });
         }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- PRODUCT SKU IMAGES API ---
+app.get('/api/sku-images', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const images = await db.collection('product_images').find({}).toArray();
+        res.json(images);
+    } catch (e) {
+        try {
+            const dir = getProductImagesPath();
+            const files = fs.readdirSync(dir);
+            const list = files.map(file => {
+                const sku = path.parse(file).name;
+                return {
+                    sku,
+                    filename: file,
+                    url: `/product_images/${file}`
+                };
+            });
+            res.json(list);
+        } catch (err) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+});
+
+app.post('/api/sku-images', uploadSkuImage.array('files'), async (req, res) => {
+    try {
+        const db = await connectDB();
+        const collection = db.collection('product_images');
+        const results = [];
+        
+        for (let file of req.files) {
+            const sku = path.parse(file.originalname).name.trim();
+            const filename = file.filename;
+            const url = `/product_images/${filename}`;
+            const record = {
+                sku,
+                filename,
+                url,
+                uploadDate: new Date()
+            };
+            
+            await collection.updateOne(
+                { sku },
+                { $set: record },
+                { upsert: true }
+            );
+            results.push(record);
+        }
+        
+        res.json({ success: true, message: 'SKU images uploaded successfully', files: results });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/sku-images/:sku', async (req, res) => {
+    try {
+        const { sku } = req.params;
+        const db = await connectDB();
+        const collection = db.collection('product_images');
+        
+        const record = await collection.findOne({ sku });
+        if (record) {
+            const filepath = path.join(getProductImagesPath(), record.filename);
+            if (fs.existsSync(filepath)) {
+                fs.unlinkSync(filepath);
+            }
+            await collection.deleteOne({ sku });
+            res.json({ success: true, message: 'SKU image deleted' });
+        } else {
+            const dir = getProductImagesPath();
+            const files = fs.readdirSync(dir);
+            const foundFile = files.find(f => path.parse(f).name === sku);
+            if (foundFile) {
+                fs.unlinkSync(path.join(dir, foundFile));
+                res.json({ success: true, message: 'SKU image file deleted' });
+            } else {
+                res.status(404).json({ error: 'SKU image not found' });
+            }
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- MEESHO ORDER PDFS API ---
+app.get('/api/order-pdfs', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const dir = getUploadedPdfsPath();
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const files = fs.readdirSync(dir);
+        
+        const list = [];
+        for (let file of files) {
+            const stats = fs.statSync(path.join(dir, file));
+            const count = await db.collection('order_labels').countDocuments({ pdfName: file });
+            list.push({
+                name: file,
+                size: stats.size,
+                uploadDate: stats.mtime,
+                ordersCount: count
+            });
+        }
+        res.json(list);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No PDF file uploaded' });
+        }
+        
+        const db = await connectDB();
+        const collection = db.collection('order_labels');
+        const pdfPath = req.file.path;
+        const filename = req.file.filename;
+        const dataBuffer = fs.readFileSync(pdfPath);
+        const parser = new pdfParse.PDFParse({ data: dataBuffer });
+        const result = await parser.getText();
+        await parser.destroy();
+        
+        const pages = result.pages || [];
+        
+        let successCount = 0;
+        let errors = [];
+        const bulkOps = [];
+        
+        for (let page of pages) {
+            const text = page.text;
+            const pageNum = page.num;
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            
+            let orderId = '';
+            const orderMatch = text.match(/\b(3\d{14,17}(?:_\d+)?)\b/);
+            if (orderMatch) {
+                orderId = orderMatch[1];
+            }
+            
+            let awb = '';
+            const awbMatch = text.match(/\b(VL\d{10,14}|SF\w{8,12})\b/i);
+            if (awbMatch) {
+                awb = awbMatch[1];
+            } else {
+                const numericMatches = text.matchAll(/\b(\d{10,15})\b/g);
+                for (const match of numericMatches) {
+                    const val = match[1];
+                    if (!orderId || (!orderId.includes(val) && !val.includes(orderId))) {
+                        awb = val;
+                        break;
+                    }
+                }
+            }
+            
+            if (!awb) {
+                for (let line of lines) {
+                    const clean = line.replace(/\s+/g, '');
+                    if (/^VL\d{11}$/i.test(clean)) {
+                        awb = clean.toUpperCase();
+                        break;
+                    }
+                    if (/^\d{10,15}$/.test(clean) && (!orderId || !orderId.startsWith(clean))) {
+                        awb = clean;
+                        break;
+                    }
+                }
+            }
+            
+            let sku = '';
+            const skuHeaderIndex = lines.findIndex(l => {
+                const up = l.toUpperCase();
+                return up.includes('SKU') && (up.includes('SIZE') || up.includes('ORDER'));
+            });
+            if (skuHeaderIndex !== -1 && skuHeaderIndex < lines.length - 1) {
+                const nextLine = lines[skuHeaderIndex + 1];
+                sku = nextLine.split(/\s+/)[0];
+            }
+            
+            let customerName = '';
+            const custIndex = lines.findIndex(l => l.toLowerCase().includes('customer address'));
+            if (custIndex !== -1 && custIndex < lines.length - 1) {
+                customerName = lines[custIndex + 1];
+            }
+            
+            if (orderId || awb) {
+                const cleanAwb = awb.trim();
+                const cleanOrderId = orderId.trim();
+                const cleanSku = sku.trim();
+                const cleanName = customerName.trim();
+                
+                bulkOps.push({
+                    updateOne: {
+                        filter: { orderId: cleanOrderId },
+                        update: {
+                            $set: {
+                                awb: cleanAwb || cleanOrderId,
+                                orderId: cleanOrderId,
+                                sku: cleanSku,
+                                customerName: cleanName || 'Unknown Customer',
+                                pdfName: filename,
+                                uploadDate: new Date()
+                            }
+                        },
+                        upsert: true
+                    }
+                });
+                successCount++;
+            } else {
+                errors.push(`Page ${pageNum}: Could not find Order No or AWB barcode.`);
+            }
+        }
+        
+        if (bulkOps.length > 0) {
+            await collection.bulkWrite(bulkOps, { ordered: false });
+        }
+        
+        res.json({
+            success: true,
+            message: `Parsed PDF successfully. Imported ${successCount} orders.`,
+            filename: filename,
+            importedCount: successCount,
+            errorsCount: errors.length,
+            errors: errors
+        });
+        
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/order-pdfs/:filename', async (req, res) => {
+    try {
+        const { filename } = req.params;
+        const sanitized = path.basename(filename);
+        const filepath = path.join(getUploadedPdfsPath(), sanitized);
+        
+        if (fs.existsSync(filepath)) {
+            fs.unlinkSync(filepath);
+        }
+        
+        const db = await connectDB();
+        await db.collection('order_labels').deleteMany({ pdfName: sanitized });
+        
+        res.json({ success: true, message: 'PDF and associated orders deleted successfully' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- BARCODE LOOKUP API ---
+app.get('/api/lookup-barcode', async (req, res) => {
+    try {
+        const { barcode } = req.query;
+        if (!barcode) {
+            return res.status(400).json({ error: 'Barcode parameter is required' });
+        }
+        
+        const db = await connectDB();
+        const cleanBarcode = barcode.trim();
+        
+        const order = await db.collection('order_labels').findOne({
+            $or: [
+                { awb: cleanBarcode },
+                { orderId: cleanBarcode },
+                { awb: { $regex: cleanBarcode, $options: 'i' } },
+                { orderId: { $regex: cleanBarcode, $options: 'i' } }
+            ]
+        });
+        
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found for scanned barcode' });
+        }
+        
+        // Find mapped design name (if any)
+        const mapping = await db.collection('sku_mappings').findOne({ sku: order.sku });
+        const designName = mapping ? mapping.designName : order.sku;
+        
+        // Find matching image (using designName first, fallback to raw sku)
+        let skuImage = null;
+        
+        // Try searching product_images collection by designName
+        skuImage = await db.collection('product_images').findOne({ 
+            sku: { $regex: new RegExp(`^${designName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } 
+        });
+        
+        // Fallback: search product_images collection by raw sku (if different from designName)
+        if (!skuImage && designName !== order.sku) {
+            skuImage = await db.collection('product_images').findOne({ 
+                sku: { $regex: new RegExp(`^${order.sku.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } 
+            });
+        }
+        
+        // Try searching filesystem by designName or raw sku
+        if (!skuImage) {
+            const dir = getProductImagesPath();
+            if (fs.existsSync(dir)) {
+                const files = fs.readdirSync(dir);
+                // Try finding by designName
+                let foundFile = files.find(f => path.parse(f).name.toLowerCase() === designName.toLowerCase());
+                // Fallback to raw sku
+                if (!foundFile && designName !== order.sku) {
+                    foundFile = files.find(f => path.parse(f).name.toLowerCase() === order.sku.toLowerCase());
+                }
+                
+                if (foundFile) {
+                    skuImage = {
+                        sku: designName,
+                        filename: foundFile,
+                        url: `/product_images/${foundFile}`
+                    };
+                }
+            }
+        }
+        
+        res.json({
+            success: true,
+            order: {
+                ...order,
+                designName: mapping ? mapping.designName : ''
+            },
+            skuImage: skuImage || null
+        });
+        
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- SKU MAPPINGS EXCEL API ---
+app.post('/api/sku-mappings', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No Excel file uploaded' });
+        }
+        
+        const db = await connectDB();
+        const collection = db.collection('sku_mappings');
+        
+        const workbook = XLSX.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        
+        // Convert sheet to row arrays [ [sku, designName], [sku, designName] ]
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        const bulkOps = [];
+        const batchSize = 50000;
+        let importedCount = 0;
+        
+        for (let row of rows) {
+            if (!Array.isArray(row) || row.length === 0) continue;
+            
+            const sku = String(row[0] || '').trim();
+            const designName = String(row[1] || '').trim();
+            
+            if (sku && designName && sku.toLowerCase() !== 'sku') {
+                bulkOps.push({
+                    updateOne: {
+                        filter: { sku: sku },
+                        update: {
+                            $set: {
+                                sku: sku,
+                                designName: designName,
+                                updatedAt: new Date()
+                            }
+                        },
+                        upsert: true
+                    }
+                });
+            }
+        }
+        
+        // Execute bulkWrite in batches
+        for (let i = 0; i < bulkOps.length; i += batchSize) {
+            const batch = bulkOps.slice(i, i + batchSize);
+            await collection.bulkWrite(batch, { ordered: false });
+            importedCount += batch.length;
+        }
+        
+        // Store upload stats
+        await db.collection('mapping_stats').updateOne(
+            { name: 'last_import' },
+            {
+                $set: {
+                    filename: req.file.originalname,
+                    importedCount: importedCount,
+                    uploadDate: new Date()
+                }
+            },
+            { upsert: true }
+        );
+        
+        res.json({
+            success: true,
+            message: `Successfully parsed spreadsheet. Imported/Updated ${importedCount} SKU mappings.`,
+            importedCount
+        });
+        
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/sku-mappings/stats', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const totalMappings = await db.collection('sku_mappings').countDocuments();
+        const lastImport = await db.collection('mapping_stats').findOne({ name: 'last_import' });
+        res.json({
+            totalMappings,
+            lastImport: lastImport || null
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/sku-mappings/search', async (req, res) => {
+    try {
+        const { q, page = 1, limit = 20 } = req.query;
+        const db = await connectDB();
+        
+        const query = {};
+        if (q) {
+            query.$or = [
+                { sku: { $regex: q, $options: 'i' } },
+                { designName: { $regex: q, $options: 'i' } }
+            ];
+        }
+        
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const total = await db.collection('sku_mappings').countDocuments(query);
+        const mappings = await db.collection('sku_mappings')
+            .find(query)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .toArray();
+            
+        res.json({
+            mappings,
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit)
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/parsed-orders', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const orders = await db.collection('order_labels').find({}).sort({ uploadDate: -1 }).toArray();
+        res.json(orders);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
