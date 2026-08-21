@@ -35,6 +35,16 @@ function wrapPlaywright(playwright) {
             const browser = await originalLaunch.call(playwright.chromium, options);
             
             // Wrap browser context and page creations to inject screencasting
+            const originalClose = browser.close;
+            browser.close = async function () {
+                try {
+                    await originalClose.apply(browser, arguments);
+                } catch (e) {
+                    console.error("Error closing browser:", e);
+                }
+                setTimeout(() => process.exit(0), 500);
+            };
+
             const originalNewContext = browser.newContext;
             browser.newContext = async function (contextOptions) {
                 const context = await originalNewContext.call(browser, contextOptions);

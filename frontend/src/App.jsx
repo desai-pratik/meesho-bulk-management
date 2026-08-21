@@ -20,17 +20,30 @@ import { FolderUp, KeyRound, Tags, Settings, Menu, X, UserCircle, Bell, Scan, Lo
 // Connect to backend server on port 3001
 const socket = io(BACKEND_URL);
 
-// Monkeypatch fetch globally to inject JWT Authorization header
+// Monkeypatch fetch globally to inject JWT Authorization header and handle auth errors
 const originalFetch = window.fetch;
 window.fetch = async (url, options = {}) => {
   const token = localStorage.getItem('token');
-  if (token && (url.startsWith(BACKEND_URL) || url.startsWith('/api') || url.includes('/api/'))) {
+  if (token && (typeof url === 'string' && (url.startsWith(BACKEND_URL) || url.startsWith('/api') || url.includes('/api/')))) {
     options.headers = {
       ...options.headers,
       'Authorization': `Bearer ${token}`
     };
   }
-  return originalFetch(url, options);
+  const response = await originalFetch(url, options);
+  
+  if (response.status === 401 || response.status === 403) {
+    try {
+      const clone = response.clone();
+      const data = await clone.json();
+      if (data.error === 'Invalid or expired token' || data.error === 'Unauthorized') {
+        window.dispatchEvent(new Event('auth-error'));
+      }
+    } catch (e) {
+      // Ignore parsing error
+    }
+  }
+  return response;
 };
 
 function App() {
@@ -56,6 +69,14 @@ function App() {
     setToken('');
     setUser(null);
   };
+
+  useEffect(() => {
+    const handleAuthError = () => {
+      handleLogout();
+    };
+    window.addEventListener('auth-error', handleAuthError);
+    return () => window.removeEventListener('auth-error', handleAuthError);
+  }, []);
 
   const fetchErrorsCount = () => {
     fetch(`${BACKEND_URL}/api/errors`)

@@ -23,16 +23,14 @@ const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const FILE_PATH = path.join(__dirname, 'uploaded-files');
 
 // Helper to read accounts
-function getAccounts() {
+async function getAccounts() {
     try {
-        const csv = fs.readFileSync('accounts.csv', 'utf8');
-        const lines = csv.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
-        return lines.map(line => {
-            const [username, password, name, isActive] = line.split(',');
-            return { username, password, name, isActive: isActive ? isActive.trim() === 'true' : true };
-        }).filter(acc => acc.isActive);
+        const { connectDB } = require('./db');
+        const db = await connectDB();
+        const accounts = await db.collection('accounts').find({ isActive: true }).toArray();
+        return accounts;
     } catch (e) {
-        console.error("Error reading accounts.csv:", e.message);
+        console.error("Error fetching accounts from DB:", e.message);
         return [];
     }
 }
@@ -356,7 +354,7 @@ async function processAccount(browser, account, uploadFiles) {
 }
 
 async function runBot() {
-    const accounts = getAccounts();
+    const accounts = await getAccounts();
     const uploadFiles = getUploadFiles();
 
     if (uploadFiles.length === 0) {

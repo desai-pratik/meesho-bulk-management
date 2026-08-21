@@ -20,16 +20,17 @@ console.log = (...args) => {
 
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
-const ACCOUNTS_FILE = 'accounts.csv';
 const UPDATES_FILE = 'inventory_stock_updates.csv';
 
 // Helper to read accounts
 async function getAccounts() {
     try {
+        const { connectDB } = require('./db');
         const db = await connectDB();
-        return await db.collection('accounts').find({ isActive: true }).toArray();
+        const accounts = await db.collection('accounts').find({ isActive: true }).toArray();
+        return accounts;
     } catch (e) {
-        console.error("Error reading accounts from MongoDB:", e.message);
+        console.error("Error fetching accounts from DB:", e.message);
         return [];
     }
 }

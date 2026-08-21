@@ -19,7 +19,6 @@ console.log = (...args) => {
 };
 
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
-const ACCOUNTS_FILE = path.join(__dirname, 'accounts.csv');
 async function updateReturnOTPs(username, extractedOtps) {
     try {
         const db = await connectDB();
@@ -47,20 +46,9 @@ async function updateReturnOTPs(username, extractedOtps) {
 
 async function loadAccounts() {
     try {
-        if (!fs.existsSync(ACCOUNTS_FILE)) {
-            return [];
-        }
-        const csvText = fs.readFileSync(ACCOUNTS_FILE, 'utf8');
-        const lines = csvText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('username,'));
-
-        let allAccounts = lines.map(line => {
-            const parts = line.split(',');
-            const username = parts[0]?.replace(/^"|"$/g, '');
-            const password = parts[1]?.replace(/^"|"$/g, '');
-            const isActiveStr = parts[3]?.replace(/^"|"$/g, '');
-            const isActive = isActiveStr ? isActiveStr.trim() === 'true' : true;
-            return { username, password, isActive };
-        }).filter(acc => acc.username && acc.password && acc.isActive);
+        const { connectDB } = require('./db');
+        const db = await connectDB();
+        let allAccounts = await db.collection('accounts').find({ isActive: true }).toArray();
 
         // If TARGET_ACCOUNT is set, filter for it (supports comma-separated list of accounts)
         if (process.env.TARGET_ACCOUNT) {
@@ -70,7 +58,7 @@ async function loadAccounts() {
 
         return allAccounts;
     } catch (e) {
-        console.error("Error reading accounts.csv:", e.message);
+        console.error("Error fetching accounts from DB:", e.message);
         return [];
     }
 }

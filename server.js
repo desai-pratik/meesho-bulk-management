@@ -39,7 +39,7 @@ const io = new Server(server, {
 const activeProcesses = new Map();
 
 // Helpers for file paths
-const getAccountsPath = () => path.join(__dirname, 'accounts.csv');
+
 const getUploadsPath = () => {
     const dir = path.join(__dirname, 'uploaded-files');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -124,59 +124,14 @@ const uploadPdf = multer({ storage: pdfStorage });
 
 // --- DATABASE SYNC & INITIALIZATION LAYER ---
 
-async function syncLocalCacheFiles() {
-    try {
-        const db = await connectDB();
 
-        // Sync only accounts.csv (JSON and inventory CSV cache files are removed as we run exclusively from the DB)
-        
-        // 1. Sync accounts.csv
-        const accounts = await db.collection('accounts').find({}).toArray();
-        let csvContent = 'username,password,name,isActive\n';
-        for (let acc of accounts) {
-            csvContent += `${acc.username},${acc.password},${acc.name || ''},${acc.isActive !== false}\n`;
-        }
-        fs.writeFileSync(getAccountsPath(), csvContent, 'utf8');
-
-        console.log("Local CSV cache files successfully synced from MongoDB.");
-    } catch (e) {
-        console.error("Failed to sync local cache files:", e.message);
-    }
-}
 
 async function initializeDB() {
     try {
         const db = await connectDB();
         console.log("Connected to MongoDB successfully.");
 
-        // 1. Migrate Accounts
-        const accountsColl = db.collection('accounts');
-        const accountsCount = await accountsColl.countDocuments();
-        if (accountsCount === 0) {
-            const accountsPath = getAccountsPath();
-            if (fs.existsSync(accountsPath)) {
-                console.log("Migrating accounts to MongoDB...");
-                const csv = fs.readFileSync(accountsPath, 'utf8');
-                const lines = csv.split('\n').filter(l => l.trim().length > 0);
-                const toInsert = [];
-                for (let line of lines) {
-                    if (line.startsWith('username,')) continue;
-                    const [username, password, name, isActive] = line.split(',');
-                    if (username && password) {
-                        toInsert.push({
-                            username: username.trim(),
-                            password: password.trim(),
-                            name: name ? name.trim() : '',
-                            isActive: isActive ? isActive.trim() === 'true' : true
-                        });
-                    }
-                }
-                if (toInsert.length > 0) {
-                    await accountsColl.insertMany(toInsert);
-                    console.log(`Migrated ${toInsert.length} accounts to MongoDB.`);
-                }
-            }
-        }
+        // 1. Migrate Accounts (Removed as accounts.csv is no longer used)
 
         // 2. Migrate Inventory Price & Stock Updates
         const priceColl = db.collection('inventory_price_updates');
@@ -309,7 +264,7 @@ async function initializeDB() {
             console.warn("Index check failed or already exists:", idxErr.message);
         }
 
-        await syncLocalCacheFiles();
+
 
     } catch (e) {
         console.error("Failed to initialize database or perform migration:", e.message);
@@ -721,30 +676,7 @@ app.get('/api/accounts', async (req, res) => {
         const accounts = await db.collection('accounts').find({}).toArray();
         res.json(accounts);
     } catch (e) {
-        console.warn("DB query failed, falling back to local accounts.csv", e.message);
-        try {
-            if (!fs.existsSync(getAccountsPath())) {
-                return res.json([]);
-            }
-            const csv = fs.readFileSync(getAccountsPath(), 'utf8');
-            const lines = csv.split('\n').filter(l => l.trim().length > 0);
-            let accounts = [];
-            for (let line of lines) {
-                if (line.startsWith('username,')) continue;
-                const [username, password, name, isActive] = line.split(',');
-                if (username && password) {
-                    accounts.push({
-                        username: username.trim(),
-                        password: password.trim(),
-                        name: name ? name.trim() : '',
-                        isActive: isActive ? isActive.trim() === 'true' : true
-                    });
-                }
-            }
-            res.json(accounts);
-        } catch (csvErr) {
-            res.status(500).json({ error: csvErr.message });
-        }
+        res.status(500).json({ error: "Failed to fetch accounts from DB: " + e.message });
     }
 });
 
@@ -767,7 +699,7 @@ app.post('/api/accounts', async (req, res) => {
             })));
         }
 
-        await syncLocalCacheFiles();
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -801,7 +733,7 @@ app.post('/api/inventory-updates', async (req, res) => {
             await priceColl.insertMany(toInsert);
         }
 
-        await syncLocalCacheFiles();
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -835,7 +767,7 @@ app.post('/api/inventory-stock-updates', async (req, res) => {
             await stockColl.insertMany(toInsert);
         }
 
-        await syncLocalCacheFiles();
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -870,7 +802,7 @@ app.post('/api/single-catalog-defaults', async (req, res) => {
             { upsert: true }
         );
 
-        await syncLocalCacheFiles();
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1470,7 +1402,7 @@ app.delete('/api/errors', async (req, res) => {
     try {
         const db = await connectDB();
         await db.collection('errors').deleteMany({});
-        await syncLocalCacheFiles();
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1492,7 +1424,7 @@ app.delete('/api/errors/:index', async (req, res) => {
                     fs.unlinkSync(screenshotPath);
                 }
             }
-            await syncLocalCacheFiles();
+
         }
         res.json({ success: true });
     } catch (e) {
