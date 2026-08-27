@@ -12,11 +12,13 @@ function SingleCatalogSetup({ socket }) {
 
     baseMetal: '', genericName: '', includedComponents: '', netQuantity: '',
     occasion: '', plating: '', productDimensionUnit: '', productHeight: '',
-    productLength: '', productWidth: '', sizing: '', stoneType: '',
+    productLength: '', productWidth: '', productBreadth: '', sizing: '', stoneType: '',
     trend: '', type: '', countryOfOrigin: '', length: '',
     careInstructions: '', closureType: '', fillingMaterial: '', material: '',
     packagingBreadth: '', packagingHeight: '', packagingLength: '',
     packagingUnit: '', pattern: '', waterResistanceLevel: '', weightUnit: '',
+    capacityInL: '', leakProof: '', productWeight: '', productWeightUnit: '',
+    volumeUnit: '', bisIsiCertificationNumber: '',
 
     manufacturerName: '', manufacturerAddress: '', manufacturerPincode: '',
     packerName: '', packerAddress: '', packerPincode: '',
@@ -165,9 +167,14 @@ function SingleCatalogSetup({ socket }) {
         <div>
           <h2 style={{ fontSize: '1.4rem' }}>Single Catalog Setup</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-            Set the default details for {activeCategory === 'jewellery_set' ? 'Jewellery Set' : 'Mangalsutras'} uploads. These will be applied to all your photos.
+            Set the default details for {
+              activeCategory === 'jewellery_set' ? 'Jewellery Set' :
+              activeCategory === 'mangalsutras' ? 'Mangalsutras' :
+              activeCategory === 'mattress_protection' ? 'Mattress Protection' :
+              'Water Bottles (Tumbler)'
+            } uploads. These will be applied to all your photos.
           </p>
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
             <NavLink
               to="/single-catalog/jewellery-set"
               className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
@@ -185,6 +192,12 @@ function SingleCatalogSetup({ socket }) {
               className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             >
               Mattress Protection
+            </NavLink>
+            <NavLink
+              to="/single-catalog/water-bottles"
+              className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
+            >
+              Water Bottles (Tumbler)
             </NavLink>
           </div>
         </div>
@@ -365,6 +378,12 @@ function SingleCatalogSetup({ socket }) {
                   <input className="input-field" name="type" value={formData.type || ''} onChange={handleChange} placeholder="e.g. Big pendant mangalsutra" />
                 </div>
               )}
+              {activeCategory === 'water_bottles' && (
+                <div className="form-group">
+                  <label className='form-label'>BIS/ISI Certification Number</label>
+                  <input className="input-field" name="bisIsiCertificationNumber" value={formData.bisIsiCertificationNumber || ''} onChange={handleChange} placeholder="Enter BIS/ISI Certification Number" />
+                </div>
+              )}
               <div className="form-group" >
                 <label className='form-label'>Description</label>
                 <textarea className="input-field" style={{ height: '80px', resize: 'vertical' }} name="description" value={formData.description} onChange={handleChange} />
@@ -403,6 +422,25 @@ function SingleCatalogSetup({ socket }) {
                   <div className="form-group"><label className='form-label'>Water Resistance Level <span>*</span></label><input className="input-field" name="waterResistanceLevel" value={formData.waterResistanceLevel} onChange={handleChange} /></div>
                   <div className="form-group"><label className='form-label'>Weight Unit <span>*</span></label><input className="input-field" name="weightUnit" value={formData.weightUnit} onChange={handleChange} /></div>
                   <div className="form-group"><label className='form-label'>COUNTRY OF ORIGIN <span>*</span></label><input className="input-field" name="countryOfOrigin" value={formData.countryOfOrigin} onChange={handleChange} /></div>
+                </>
+              ) : activeCategory === 'water_bottles' ? (
+                <>
+                  <div className="form-group"><label className='form-label'>Add Ons <span>*</span></label><input className="input-field" name="addOn" value={formData.addOn} onChange={handleChange} placeholder="e.g. Straw" /></div>
+                  <div className="form-group"><label className='form-label'>Capacity In L <span>*</span></label><input className="input-field" name="capacityInL" value={formData.capacityInL} onChange={handleChange} placeholder="e.g. 2" /></div>
+                  <div className="form-group"><label className='form-label'>Color <span>*</span></label><input className="input-field" name="color" value={formData.color} onChange={handleChange} placeholder="e.g. Blue" /></div>
+                  <div className="form-group"><label className='form-label'>Generic Name <span>*</span></label><input className="input-field" name="genericName" value={formData.genericName} onChange={handleChange} placeholder="e.g. Water Bottles" /></div>
+                  <div className="form-group"><label className='form-label'>Leak Proof <span>*</span></label><input className="input-field" name="leakProof" value={formData.leakProof} onChange={handleChange} placeholder="e.g. Yes" /></div>
+                  <div className="form-group"><label className='form-label'>Material <span>*</span></label><input className="input-field" name="material" value={formData.material} onChange={handleChange} placeholder="e.g. Plastic" /></div>
+                  <div className="form-group"><label className='form-label'>Net Quantity (N) <span>*</span></label><input className="input-field" name="netQuantity" value={formData.netQuantity} onChange={handleChange} placeholder="e.g. Pack Of 1" /></div>
+                  <div className="form-group"><label className='form-label'>Product Breadth <span>*</span></label><input className="input-field" name="productBreadth" value={formData.productBreadth} onChange={handleChange} placeholder="e.g. 4.5" /></div>
+                  <div className="form-group"><label className='form-label'>Product Height <span>*</span></label><input className="input-field" name="productHeight" value={formData.productHeight} onChange={handleChange} placeholder="e.g. 10" /></div>
+                  <div className="form-group"><label className='form-label'>Product Length <span>*</span></label><input className="input-field" name="productLength" value={formData.productLength} onChange={handleChange} placeholder="e.g. 4.5" /></div>
+                  <div className="form-group"><label className='form-label'>Product Unit <span>*</span></label><input className="input-field" name="productDimensionUnit" value={formData.productDimensionUnit} onChange={handleChange} placeholder="e.g. Inch" /></div>
+                  <div className="form-group"><label className='form-label'>Product Weight <span>*</span></label><input className="input-field" name="productWeight" value={formData.productWeight} onChange={handleChange} placeholder="e.g. 200" /></div>
+                  <div className="form-group"><label className='form-label'>Product Weight Unit <span>*</span></label><input className="input-field" name="productWeightUnit" value={formData.productWeightUnit} onChange={handleChange} placeholder="e.g. G" /></div>
+                  <div className="form-group"><label className='form-label'>Type <span>*</span></label><input className="input-field" name="type" value={formData.type} onChange={handleChange} placeholder="e.g. Others" /></div>
+                  <div className="form-group"><label className='form-label'>Volume Unit <span>*</span></label><input className="input-field" name="volumeUnit" value={formData.volumeUnit} onChange={handleChange} placeholder="e.g. L" /></div>
+                  <div className="form-group"><label className='form-label'>COUNTRY OF ORIGIN <span>*</span></label><input className="input-field" name="countryOfOrigin" value={formData.countryOfOrigin} onChange={handleChange} placeholder="e.g. India" /></div>
                 </>
               ) : (
                 <>

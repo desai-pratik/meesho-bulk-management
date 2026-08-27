@@ -75,6 +75,9 @@ function getSingleCatalogDefaultsPath(category = 'jewellery_set') {
     if (category === 'mattress_protection') {
         return path.join(__dirname, 'single_catalog_mattress_protection_defaults.json');
     }
+    if (category === 'water_bottles' || category === 'tumbler') {
+        return path.join(__dirname, 'single_catalog_water_bottles_defaults.json');
+    }
     return path.join(__dirname, 'single_catalog_jewellery_set_defaults.json');
 }
 
@@ -178,25 +181,24 @@ async function initializeDB() {
             }
         }
 
-        // 3. Migrate Single Catalog Defaults (One-time migration check)
+        // 3. Migrate Single Catalog Defaults
         const defaultsColl = db.collection('catalog_defaults');
-        const defaultsCount = await defaultsColl.countDocuments();
-        if (defaultsCount === 0) {
-            const categories = ['jewellery_set', 'mangalsutras', 'mattress_protection'];
-            const toInsert = [];
-            for (const cat of categories) {
+        const categories = ['jewellery_set', 'mangalsutras', 'mattress_protection', 'water_bottles'];
+        for (const cat of categories) {
+            const exists = await defaultsColl.findOne({ category: cat });
+            if (!exists) {
                 const p = getSingleCatalogDefaultsPath(cat);
                 if (fs.existsSync(p)) {
                     try {
                         const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-                        toInsert.push({ category: cat, defaults: data });
+                        await defaultsColl.updateOne(
+                            { category: cat },
+                            { $set: { defaults: data } },
+                            { upsert: true }
+                        );
+                        console.log(`Seeded ${cat} single catalog defaults to MongoDB.`);
                     } catch (e) {}
                 }
-            }
-            if (toInsert.length > 0) {
-                console.log("Migrating single catalog defaults to MongoDB...");
-                await defaultsColl.insertMany(toInsert);
-                console.log(`Migrated ${toInsert.length} single catalog defaults to MongoDB.`);
             }
         }
 
@@ -780,10 +782,20 @@ app.get('/api/single-catalog-defaults', async (req, res) => {
         const category = req.query.category || 'jewellery_set';
         const db = await connectDB();
         const record = await db.collection('catalog_defaults').findOne({ category });
-        if (record) {
+        if (record && record.defaults) {
             res.json(record.defaults);
         } else {
-            res.json({});
+            const p = getSingleCatalogDefaultsPath(category);
+            if (fs.existsSync(p)) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+                    res.json(data);
+                } catch (err) {
+                    res.json({});
+                }
+            } else {
+                res.json({});
+            }
         }
     } catch (e) {
         res.status(500).json({ error: e.message });
