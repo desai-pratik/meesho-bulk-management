@@ -493,14 +493,16 @@ function SingleCatalogSetup({ socket }) {
                   <input className="input-field" placeholder="Pincode" name="packerPincode" value={formData.packerPincode} onChange={handleChange} style={{ width: '80px' }} />
                 </div>
               </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Importer</h4>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <input className="input-field" placeholder="Name" name="importerName" value={formData.importerName} onChange={handleChange} />
-                  <input className="input-field" placeholder="Address" name="importerAddress" value={formData.importerAddress} onChange={handleChange} />
-                  <input className="input-field" placeholder="Pincode" name="importerPincode" value={formData.importerPincode} onChange={handleChange} style={{ width: '80px' }} />
+              {activeCategory !== 'water_bottles' && (
+                <div style={{ gridColumn: 'span 2' }}>
+                  <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Importer</h4>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <input className="input-field" placeholder="Name" name="importerName" value={formData.importerName} onChange={handleChange} />
+                    <input className="input-field" placeholder="Address" name="importerAddress" value={formData.importerAddress} onChange={handleChange} />
+                    <input className="input-field" placeholder="Pincode" name="importerPincode" value={formData.importerPincode} onChange={handleChange} style={{ width: '80px' }} />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 

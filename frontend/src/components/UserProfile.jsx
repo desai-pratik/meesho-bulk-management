@@ -5,12 +5,12 @@ import { BACKEND_URL } from '../config';
 function UserProfile({ onProfileUpdate, onLogout }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+
   // Forms state
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -108,7 +108,7 @@ function UserProfile({ onProfileUpdate, onLogout }) {
               <span>System Owner</span>
             </div>
           </div>
-          
+
           <button className="btn btn-danger btn-logout-large" onClick={onLogout}>
             <LogOut size={16} />
             <span>Logout Account</span>
@@ -194,7 +194,7 @@ function UserProfile({ onProfileUpdate, onLogout }) {
             </div>
           </div>
 
-          <div className="form-divider"></div>
+          {/* <div className="form-divider"></div> */}
 
           <div className="form-row">
             <div className="input-group">

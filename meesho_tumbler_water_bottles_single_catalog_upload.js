@@ -550,11 +550,7 @@ async function processAccount(browser, account, groups, defaults) {
                 let packerPinFilled = await fillField(page, 'Packer Pincode', defaults.packerPincode || '395010', false);
                 if (!packerPinFilled) await fillField(page, 'Packer pin code', defaults.packerPincode || '395010', false);
                 
-                // Importer Details
-                await fillField(page, 'Importer Name', defaults.importerName || 'Not Required', false);
-                await fillField(page, 'Importer Address', defaults.importerAddress || 'Not Required', false);
-                await fillField(page, 'Importer Pincode', defaults.importerPincode || 'Not Required', false);
-                
+
                 // Other Attributes
                 if (defaults.bisIsiCertificationNumber) {
                     await fillField(page, 'BIS/ISI Certification Number', defaults.bisIsiCertificationNumber, false);
@@ -563,12 +559,18 @@ async function processAccount(browser, account, groups, defaults) {
                     await fillField(page, 'Brand', defaults.brand, true);
                 }
                 if (defaults.description) {
-                    try {
-                        const descInput = page.locator('textarea').first();
-                        if (await descInput.count() > 0) {
-                            await descInput.fill(defaults.description);
-                        }
-                    } catch(e) {}
+                    let descFilled = await fillField(page, 'Description', defaults.description, false);
+                    if (!descFilled) {
+                        descFilled = await fillField(page, 'Product Description', defaults.description, false);
+                    }
+                    if (!descFilled) {
+                        try {
+                            const descInput = page.locator('textarea').first();
+                            if (await descInput.count() > 0) {
+                                await descInput.fill(defaults.description);
+                            }
+                        } catch(e) {}
+                    }
                 }
                 
                 console.log(`  > Submitting catalog...`);
