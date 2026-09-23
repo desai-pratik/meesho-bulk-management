@@ -78,6 +78,9 @@ function getSingleCatalogDefaultsPath(category = 'jewellery_set') {
     if (category === 'water_bottles' || category === 'tumbler') {
         return path.join(__dirname, 'single_catalog_water_bottles_defaults.json');
     }
+    if (category === 'jugs' || category === 'jug') {
+        return path.join(__dirname, 'single_catalog_jugs_defaults.json');
+    }
     return path.join(__dirname, 'single_catalog_jewellery_set_defaults.json');
 }
 

@@ -58,6 +58,80 @@ async function randomDelay(page) {
     await page.waitForTimeout(2000)//s just for stability
 }
 
+// Dedicated helper to wait strictly for the bulk upload confirmation toast or modal banner
+async function waitForBulkUploadConfirmation(page, username, fileName, timeoutMs = 60000) {
+    console.log(`[${username}] Upload submitted for ${fileName}. Waiting for confirmation toast ("File has been uploaded successfully")...`);
+    const startTime = Date.now();
+    const pollInterval = 1000;
+
+    while (Date.now() - startTime < timeoutMs) {
+        try {
+            // 1. Check for success toast or banner on page
+            const successLocators = [
+                page.getByText(/File (has been )?uploaded successfully/i),
+                page.getByText(/uploaded successfully/i),
+                page.getByText(/Your File ID is/i),
+                page.locator('text=/File (has been )?uploaded successfully/i'),
+                page.locator('div[role="alert"]:has-text("uploaded successfully")'),
+                page.locator('div[role="status"]:has-text("uploaded successfully")'),
+                page.locator('div:has-text("File has been uploaded successfully")'),
+                page.locator('div:has-text("File uploaded successfully")'),
+                page.getByText('Follow steps to increase visibility for new catalog', { exact: false })
+            ];
+
+            for (const loc of successLocators) {
+                const count = await loc.count().catch(() => 0);
+                for (let i = 0; i < count; i++) {
+                    const el = loc.nth(i);
+                    if (await el.isVisible().catch(() => false)) {
+                        let text = '';
+                        try {
+                            text = (await el.innerText()).trim();
+                        } catch (e) {
+                            text = 'File has been uploaded successfully';
+                        }
+                        console.log(`[${username}] ✅ Success confirmation detected: "${text}"`);
+                        await page.waitForTimeout(3000);
+                        return { success: true, message: text };
+                    }
+                }
+            }
+
+            // 2. Check for explicit error banners or toasts indicating upload failure
+            const errorLocators = [
+                page.locator('.toast-error, .error-message, .alert-danger'),
+                page.getByText(/upload failed/i),
+                page.getByText(/failed to upload/i),
+                page.getByText(/invalid file/i),
+                page.getByText(/error in file/i),
+                page.getByText(/something went wrong/i)
+            ];
+
+            for (const errLoc of errorLocators) {
+                const count = await errLoc.count().catch(() => 0);
+                for (let i = 0; i < count; i++) {
+                    const el = errLoc.nth(i);
+                    if (await el.isVisible().catch(() => false)) {
+                        const errText = ((await el.innerText().catch(() => '')) || '').trim();
+                        if (errText && !errText.toLowerCase().includes('success')) {
+                            throw new Error(`Upload failed: ${errText}`);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            if (err.message && err.message.startsWith('Upload failed:')) {
+                throw err;
+            }
+            // Ignore transient locator query errors while DOM updates
+        }
+
+        await page.waitForTimeout(pollInterval);
+    }
+
+    throw new Error(`Upload confirmation toast ("File has been uploaded successfully") was not received within ${timeoutMs / 1000} seconds`);
+}
+
 
 
 // Dedicated function to handle the "We are having trouble" error page
@@ -159,6 +233,9 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                 } catch (e) { /* ignore evaluate error */ }
             }
 
+            // Immediately nuke popups that might have been triggered by clicking
+            await nukePopups(page);
+
             // 4. Verify (if provided)
             if (verifyLocator) {
                 const resolvedVerify = verifyLocator.first ? verifyLocator.first() : verifyLocator;
@@ -167,6 +244,7 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                     return; // Success!
                 } catch (e) {
                     console.log(`  > Clicked '${name}', but next step didn't appear in 5s.`);
+                    await nukePopups(page);
 
                     const handled = await handleErrorPage(page);
                     if (handled) {
@@ -298,6 +376,7 @@ async function processAccount(browser, account, uploadFiles) {
                     .or(page.getByRole('button', { name: /submit/i }))
                     .or(page.getByText('Upload', { exact: true }));
 
+                let uploadClicked = false;
                 if (await submitBtn.count() > 0) {
                     const buttons = await submitBtn.all();
                     for (const btn of buttons) {
@@ -308,25 +387,30 @@ async function processAccount(browser, account, uploadFiles) {
                             console.log(`[${username}] Found button: ${text}. Clicking...`);
                             await nukePopups(page); // Nuke one last time before clicking upload
                             await clickWithRetry(page, btn, text);
+                            uploadClicked = true;
                             break;
                         }
                     }
                 }
 
-                console.log(`[${username}] Upload finished for ${fileName}. Waiting 10 seconds...`);
-                await page.waitForTimeout(30000); // Reduced to 10s
+                if (!uploadClicked) {
+                    throw new Error("Final 'Upload' button was not found or could not be clicked");
+                }
 
-                fileResults.push({ file: fileName, status: 'Success' });
-                await logBotSuccess(path.basename(__filename), username, `Uploaded bulk catalog file successfully: ${fileName}`);
+                // Step I: Wait strictly for confirmation toast "File has been uploaded successfully"
+                const uploadResult = await waitForBulkUploadConfirmation(page, username, fileName, 60000);
+
+                fileResults.push({ file: fileName, status: 'Success', message: uploadResult.message });
+                await logBotSuccess(path.basename(__filename), username, `Uploaded bulk catalog file successfully: ${fileName}`, null, fileName);
 
             } catch (e) {
                 console.error(`[${username}] Failed to upload ${fileName}: ${e.message}`);
                 fileResults.push({ file: fileName, status: 'Failed', reason: e.message });
                 // Attempt to take a screenshot of the failure
                 try {
-                    await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
+                    await logBotError(path.basename(__filename), username, `Failed to upload file ${fileName}: ${e.message}`, typeof page !== 'undefined' ? page : null, null, fileName);
                 } catch (err) {
-                    console.log("error for gaurav 303", err)
+                    console.log("error logging failure", err);
                 }
             }
         }
@@ -335,9 +419,9 @@ async function processAccount(browser, account, uploadFiles) {
         console.error(`Error with account ${username}:`, e.message);
         globalError = e.message;
         try {
-            await logBotError(path.basename(__filename), username, e.message, typeof page !== 'undefined' ? page : null);
+            await logBotError(path.basename(__filename), username, `Account error: ${e.message}`, typeof page !== 'undefined' ? page : null);
         } catch (err) {
-            console.log("error for gaurav at 312", err)
+            console.log("error logging session failure", err);
         }
     } finally {
         console.log(`[${username}] Closing session...`);

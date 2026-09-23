@@ -19,8 +19,6 @@ console.log = (...args) => {
 
 // Configuration
 const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
-// UPDATE THIS TO YOUR FOLDER PATH
-// const FILE_PATH = String.raw`c:\Users\ASUS\Downloads\pratik`;
 const FILE_PATH = path.join(__dirname, 'uploaded-files');
 
 // Helper to read accounts
@@ -55,7 +53,7 @@ function getUploadFiles() {
 
 // FAST MODE: Minimal delay
 async function randomDelay(page) {
-    await page.waitForTimeout(2000)//s just for stability
+    await page.waitForTimeout(2000); // just for stability
 }
 
 // Dedicated helper to wait strictly for the bulk upload confirmation toast or modal banner
@@ -132,14 +130,10 @@ async function waitForBulkUploadConfirmation(page, username, fileName, timeoutMs
     throw new Error(`Upload confirmation toast ("File has been uploaded successfully") was not received within ${timeoutMs / 1000} seconds`);
 }
 
-
-
 // Dedicated function to handle the "We are having trouble" error page
 async function handleErrorPage(page) {
     try {
-        // Check for the specific error text
         const errorText = page.getByText('We are having trouble showing this data', { exact: false });
-        // Use waitFor instead of isVisible to avoid instant resolution
         try {
             await errorText.waitFor({ state: 'visible', timeout: 1000 });
             console.log("  > Detected 'We are having trouble' error page.");
@@ -179,7 +173,6 @@ async function handleErrorPage(page) {
 async function clickWithRetry(page, locator, name, verifyLocator = null) {
     for (let i = 0; i < 5; i++) {
         try {
-            // Early skip: Check if target state naturally appeared (e.g., from an auth popup resolving)
             if (verifyLocator) {
                 const resolvedVerify = verifyLocator.first ? verifyLocator.first() : verifyLocator;
                 try {
@@ -190,16 +183,13 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                 } catch (e) { }
             }
 
-            // 0. CHECK FOR ERROR PAGE FIRST
             await handleErrorPage(page);
 
-            // 1. Nuke before clicking
             const authClicked = await nukePopups(page);
             if (authClicked && authClicked.authClicked) {
                 console.log(`  > Special Auth button clicked. Waiting for page state to advance...`);
                 await page.waitForTimeout(2000);
 
-                // Immediately check if the target has appeared after the transition
                 if (verifyLocator) {
                     const resolvedVerify = verifyLocator.first ? verifyLocator.first() : verifyLocator;
                     try {
@@ -211,7 +201,6 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                 }
             }
 
-            // 2. Wait for element to be visible (solves the instant-timeout of isVisible() bug)
             const resolvedLocator = locator.first ? locator.first() : locator;
             try {
                 await resolvedLocator.waitFor({ state: 'visible', timeout: 5000 });
@@ -223,7 +212,6 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                 continue;
             }
 
-            // 3. Click (First try gentle playwright click, fallback to forced DOM click)
             try {
                 await resolvedLocator.click({ timeout: 3000 });
             } catch (clickErr) {
@@ -233,7 +221,6 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                 } catch (e) { /* ignore evaluate error */ }
             }
 
-            // 4. Verify (if provided)
             if (verifyLocator) {
                 const resolvedVerify = verifyLocator.first ? verifyLocator.first() : verifyLocator;
                 try {
@@ -273,20 +260,16 @@ async function processAccount(browser, account, uploadFiles) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
-    const context = await browser.newContext({
+    let contextOptions = {
         viewport: null,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    });
+    };
+    const context = await browser.newContext(contextOptions);
 
-    // Inject stealth scripts to look like a human
     await context.addInitScript(() => {
-        // Remove webdriver property
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        // Mock plugins to appear as a regular browser
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        // Mock languages
         Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        // Add fake chrome object
         window.chrome = { runtime: {} };
     });
 
@@ -296,22 +279,18 @@ async function processAccount(browser, account, uploadFiles) {
     let globalError = null;
 
     try {
-        // 1. Login
-        console.log(`[${username}] Navigating to login...`);
+        console.log(`[${username}] Navigating to Meesho...`);
         await page.goto(LOGIN_URL, { timeout: 30000 });
 
-        await page.getByRole('textbox', { name: 'Email Id or mobile number' }).fill(username);
+        const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
+        await emailInput.waitFor({ state: 'visible', timeout: 30000 });
+
+        console.log(`[${username}] Logging in now...`);
+        await emailInput.fill(username);
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
-
-        console.log(`[${username}] Logging in...`);
         await page.getByRole('button', { name: 'Log in', exact: true }).click();
+        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
 
-        // Wait for Dashboard
-        try {
-            await page.waitForLoadState('networkidle', { timeout: 10000 });
-        } catch (e) { }
-
-        // 2. Clear Dashboard Ads
         await clearDashboard(page);
 
         // Loop through ALL files
@@ -321,17 +300,15 @@ async function processAccount(browser, account, uploadFiles) {
             console.log(`\n[${username}] Processing File ${i + 1}/${uploadFiles.length}: ${fileName}`);
 
             try {
-                // REFRESH PAGE before starting a new file
                 if (i > 0) {
                     console.log(`[${username}] Resetting to Dashboard for next file...`);
                     try {
-                        // Use goto LOGIN_URL instead of reload() for better stability
                         await page.goto(LOGIN_URL, { timeout: 20000 });
                         await page.waitForLoadState('networkidle', { timeout: 5000 });
                     } catch (e) {
                         console.log(`[${username}] Navigation timed out. Continuing anyway...`);
                     }
-                    await clearDashboard(page); // Clear ads again after reload
+                    await clearDashboard(page);
                 }
 
                 // Step A: Catalog Uploads -> Verify 'Add Catalog in Bulk' appears
@@ -339,35 +316,37 @@ async function processAccount(browser, account, uploadFiles) {
                 const addCatalogBtn = page.getByRole('button', { name: 'Add Catalog in Bulk' });
                 await clickWithRetry(page, page.getByText('Catalog Uploads'), 'Catalog Uploads', addCatalogBtn);
 
-                // Step B: Add Catalog in Bulk -> Verify 'Women Fashion' appears
+                // Step B: Add Catalog in Bulk -> Verify 'Home & Kitchen' appears
                 console.log(`[${username}] Looking for 'Add Catalog in Bulk'...`);
-                const womenFashionBtn = page.getByText('Women Fashion', { exact: true });
-                await clickWithRetry(page, addCatalogBtn, 'Add Catalog in Bulk', womenFashionBtn);
+                const homeKitchenBtn = page.getByText('Home & Kitchen', { exact: true });
+                await clickWithRetry(page, addCatalogBtn, 'Add Catalog in Bulk', homeKitchenBtn);
 
-                // Step C: Women Fashion -> Verify 'Accessories' appears
-                console.log(`[${username}] Looking for 'Women Fashion'...`);
-                const accessoriesBtn = page.getByText('Accessories', { exact: true });
-                await clickWithRetry(page, womenFashionBtn, 'Women Fashion', accessoriesBtn);
+                // Step C: Home & Kitchen -> Verify 'Home Furnishings' appears
+                console.log(`[${username}] Looking for 'Home & Kitchen'...`);
+                const homeFurnishingsBtn = page.getByText('Home Furnishings', { exact: true });
+                await clickWithRetry(page, homeKitchenBtn, 'Home & Kitchen', homeFurnishingsBtn);
 
-                // Step D: Accessories -> Verify 'Hair Accessories' appears
-                console.log(`[${username}] Looking for 'Accessories'...`);
-                const hairAccessoriesCategoryBtn = page.getByText('Hair Accessories', { exact: true }).first();
-                await clickWithRetry(page, accessoriesBtn, 'Accessories', hairAccessoriesCategoryBtn);
+                // Step D: Home Furnishings -> Verify 'Baby & Nursery Bedding' appears
+                console.log(`[${username}] Looking for 'Home Furnishings'...`);
+                const babyNurseryBeddingBtn = page.getByText('Baby & Nursery Bedding', { exact: true });
+                await clickWithRetry(page, homeFurnishingsBtn, 'Home Furnishings', babyNurseryBeddingBtn);
 
-                // Step E: Hair Accessories Category -> Verify 'Hair Accessories' Subcategory appears
-                console.log(`[${username}] Looking for 'Hair Accessories Category'...`);
-                // Using .last() as it will be the second 'Hair Accessories' to appear in the column to the right
-                const hairAccessoriesSubcategoryBtn = page.getByText('Hair Accessories', { exact: true }).last();
-                await clickWithRetry(page, hairAccessoriesCategoryBtn, 'Hair Accessories Category', hairAccessoriesSubcategoryBtn);
+                // Step E: Baby & Nursery Bedding -> Verify 'Sleeping Bags & Togs' appears
+                console.log(`[${username}] Looking for 'Baby & Nursery Bedding'...`);
+                const sleepingBagsTogsBtn = page.getByText('Sleeping Bags & Togs', { exact: true });
+                await clickWithRetry(page, babyNurseryBeddingBtn, 'Baby & Nursery Bedding', sleepingBagsTogsBtn);
 
-                // Step F: Hair Accessories Subcategory -> Verify 'Choose File' appears
-                console.log(`[${username}] Looking for 'Hair Accessories Subcategory'...`);
-                const chooseFileWait = page.getByRole('button', { name: 'Choose File' }).or(page.getByText('Upload Template File', { exact: true }));
-                await clickWithRetry(page, hairAccessoriesSubcategoryBtn, 'Hair Accessories Subcategory', chooseFileWait);
+                // Step F: Sleeping Bags & Togs -> Verify 'Upload Template File' / 'Choose File' appears
+                console.log(`[${username}] Looking for 'Sleeping Bags & Togs'...`);
+                const chooseFileWait = page.getByRole('button', { name: /Upload Template File/i })
+                    .or(page.getByText('Upload Template File', { exact: true }))
+                    .or(page.getByRole('button', { name: 'Choose File' }))
+                    .or(page.getByText('Choose File', { exact: true }));
+                await clickWithRetry(page, sleepingBagsTogsBtn, 'Sleeping Bags & Togs', chooseFileWait);
 
-                // Step G: Choose File
-                console.log(`[${username}] Looking for 'Choose File'...`);
-                await clickWithRetry(page, chooseFileWait, 'Choose File');
+                // Step G: Choose File / Upload Template File
+                console.log(`[${username}] Looking for 'Upload Template File' / 'Choose File'...`);
+                await clickWithRetry(page, chooseFileWait, 'Upload Template File');
 
                 try {
                     await page.locator('input[type="file"]').first().setInputFiles(currentFile);
@@ -375,7 +354,7 @@ async function processAccount(browser, account, uploadFiles) {
                     await chooseFileWait.setInputFiles(currentFile);
                 }
                 console.log(`[${username}] File selected: ${fileName}`);
-                await randomDelay(page); // Keep a small delay here for file to attach
+                await randomDelay(page);
 
                 // Step H: Click Upload/Submit
                 console.log(`[${username}] Looking for final 'Upload' button...`);
@@ -392,7 +371,7 @@ async function processAccount(browser, account, uploadFiles) {
                             if (text.toLowerCase().includes('catalog upload')) continue;
 
                             console.log(`[${username}] Found button: ${text}. Clicking...`);
-                            await nukePopups(page); // Nuke one last time before clicking upload
+                            await nukePopups(page);
                             await clickWithRetry(page, btn, text);
                             uploadClicked = true;
                             break;
@@ -413,7 +392,6 @@ async function processAccount(browser, account, uploadFiles) {
             } catch (e) {
                 console.error(`[${username}] Failed to upload ${fileName}: ${e.message}`);
                 fileResults.push({ file: fileName, status: 'Failed', reason: e.message });
-                // Attempt to take a screenshot of the failure
                 try {
                     await logBotError(path.basename(__filename), username, `Failed to upload file ${fileName}: ${e.message}`, typeof page !== 'undefined' ? page : null, null, fileName);
                 } catch (err) {
@@ -454,18 +432,16 @@ async function runBot() {
         headless: process.env.HEADLESS === 'true' ? true : false,
         args: [
             '--start-maximized',
-            '--disable-blink-features=AutomationControlled', // Disable bot detection feature
+            '--disable-blink-features=AutomationControlled',
             '--disable-infobars',
             '--no-sandbox',
             '--disable-setuid-sandbox'
         ],
-        ignoreDefaultArgs: ['--enable-automation'] // Hide "Chrome is being controlled by automated test software" bar
+        ignoreDefaultArgs: ['--enable-automation']
     });
 
     const results = [];
-
-    // Batch Processing
-    const BATCH_SIZE = 1; // Keep at 2 for stability
+    const BATCH_SIZE = 1;
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
@@ -473,13 +449,13 @@ async function runBot() {
         const batchResults = await Promise.all(batch.map(account => asyncLocalStorage.run(account.username, () => processAccount(browser, account, uploadFiles))));
         results.push(...batchResults);
 
-        console.log("Batch complete. Waiting 5 seconds...");
-        await new Promise(r => setTimeout(r, 5000));
+        console.log("Batch complete. Waiting 8-12 seconds to prevent rate-limiting...");
+        const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
+        await new Promise(r => setTimeout(r, delay));
     }
 
     console.log("\nAll accounts processed.");
 
-    // --- FINAL SUMMARY (Moved BEFORE browser.close to ensure it prints) ---
     console.log("\n==========================================");
     console.log("           EXECUTION SUMMARY              ");
     console.log("==========================================");

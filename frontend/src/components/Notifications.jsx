@@ -16,10 +16,11 @@ function Notifications() {
       const botMatch = err.bot?.toLowerCase().includes(query);
       const accountMatch = err.account?.toLowerCase().includes(query);
       const skuMatch = err.sku?.toLowerCase().includes(query);
+      const fileMatch = err.file?.toLowerCase().includes(query);
       const messageMatch = err.message?.toLowerCase().includes(query);
       const dateString = err.timestamp ? new Date(err.timestamp).toLocaleString().toLowerCase() : '';
       const dateMatch = dateString.includes(query);
-      return botMatch || accountMatch || skuMatch || messageMatch || dateMatch;
+      return botMatch || accountMatch || skuMatch || fileMatch || messageMatch || dateMatch;
     });
 
   const fetchErrors = () => {
@@ -93,7 +94,7 @@ function Notifications() {
               <input
                 type="text"
                 className="input-field"
-                placeholder="Search by bot, account, SKU, message, or timestamp..."
+                placeholder="Search by bot, account, SKU, file, message..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: '2.75rem', paddingRight: searchQuery ? '2.5rem' : '1rem' }}
@@ -170,13 +171,18 @@ function Notifications() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>
                       Account: <strong>{err.account}</strong>
                     </span>
                     {err.sku && (
                       <span style={{ background: 'rgba(255,165,0,0.1)', color: 'orange', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '600' }}>
                         SKU: {err.sku}
+                      </span>
+                    )}
+                    {err.file && (
+                      <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', padding: '2px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: '600' }}>
+                        File: {err.file}
                       </span>
                     )}
                   </div>

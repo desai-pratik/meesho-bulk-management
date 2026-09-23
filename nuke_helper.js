@@ -5,46 +5,56 @@ async function injectBackgroundPoller(page) {
             if (window.__nukePollerIntervalActive) return;
             window.__nukePollerIntervalActive = true;
             
+            const isOtpElement = (el) => {
+                let curr = el;
+                for (let k = 0; k < 6; k++) {
+                    if (!curr) break;
+                    const text = (curr.innerText || curr.textContent || '').toLowerCase();
+                    if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
+                        return true;
+                    }
+                    curr = curr.parentElement;
+                }
+                return false;
+            };
+
             const runNuke = () => {
                 try {
-                    const els = Array.from(document.querySelectorAll('div, span, button, a, img, svg, p, h4, h2'));
-                    for (const el of els) {
-                        let hasSvg = false;
+                    // 1. Close buttons matching SVG / cross icons / close labels
+                    const allEls = Array.from(document.querySelectorAll('div, span, button, a, img, svg, p, h4, h2'));
+                    for (const el of allEls) {
+                        let isClose = false;
                         
-                        // Check attributes
+                        // Check attributes for cross or close
                         if (el.attributes) {
                             for (let j = 0; j < el.attributes.length; j++) {
-                                const val = el.attributes[j].value || '';
-                                if (/cross[-_](black|grey|gray|white)\.svg/.test(val)) {
-                                    hasSvg = true;
+                                const val = (el.attributes[j].value || '').toLowerCase();
+                                if (/cross[-_](black|grey|gray|white)\.svg/.test(val) || val === 'close' || val.includes('close-icon') || val.includes('close-modal')) {
+                                    isClose = true;
                                     break;
                                 }
                             }
                         }
                         
-                        // Check computed style
-                        if (!hasSvg) {
+                        // Check computed style background
+                        if (!isClose) {
                             const computedStyle = window.getComputedStyle(el);
                             const bgImg = computedStyle.backgroundImage || '';
                             if (/cross[-_](black|grey|gray|white)\.svg/.test(bgImg)) {
-                                  hasSvg = true;
+                                isClose = true;
+                            }
+                        }
+
+                        // Check aria-label or text content
+                        if (!isClose && (el.tagName === 'BUTTON' || el.tagName === 'SPAN' || el.tagName === 'DIV' || el.tagName === 'SVG')) {
+                            const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                            if (aria === 'close' || aria === 'close modal' || aria === 'dismiss') {
+                                isClose = true;
                             }
                         }
                         
-                        if (hasSvg) {
-                            // Check if this close button is part of an OTP popup we want to keep open
-                            let isOtpPopup = false;
-                            let curr = el;
-                            for (let k = 0; k < 6; k++) {
-                                if (!curr) break;
-                                const text = (curr.innerText || curr.textContent || '').toLowerCase();
-                                if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
-                                    isOtpPopup = true;
-                                    break;
-                                }
-                                curr = curr.parentElement;
-                            }
-                            if (isOtpPopup) continue;
+                        if (isClose) {
+                            if (isOtpElement(el)) continue;
 
                             const clickable = el.closest('button') || el.closest('a') || el;
                             if (clickable && window.getComputedStyle(clickable).display !== 'none') {
@@ -53,6 +63,23 @@ async function injectBackgroundPoller(page) {
                                     clickable.click();
                                 }
                             }
+                        }
+                    }
+
+                    // 2. Target "NEW TEMPLATE" popup or floating dialogs specifically
+                    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"], .MuiModal-root, [class*="modal" i]'));
+                    for (const diag of dialogs) {
+                        if (isOtpElement(diag)) continue;
+                        const diagText = (diag.innerText || '').toLowerCase();
+                        if (diagText.includes('new template') || diagText.includes('wrong & defective return price') || diagText.includes('download new template')) {
+                            const closeBtn = diag.querySelector('button, svg, [aria-label*="close" i], [class*="close" i]');
+                            if (closeBtn) {
+                                const clickable = closeBtn.closest('button') || closeBtn;
+                                clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                                if (typeof clickable.click === 'function') clickable.click();
+                            }
+                            diag.style.setProperty('display', 'none', 'important');
+                            diag.style.setProperty('pointer-events', 'none', 'important');
                         }
                     }
                 } catch(err) {}
@@ -79,6 +106,23 @@ async function injectBackgroundPoller(page) {
 async function nukePopups(page) {
     try {
         await injectBackgroundPoller(page);
+
+        // Try pressing Escape in Playwright to dismiss any open modal
+        try {
+            const hasModal = await page.evaluate(() => {
+                const diag = document.querySelector('div[role="dialog"], .MuiModal-root, [class*="modal" i]');
+                if (!diag) return false;
+                const text = (diag.innerText || '').toLowerCase();
+                // Avoid OTP
+                if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery')) return false;
+                return true;
+            });
+            if (hasModal) {
+                await page.keyboard.press('Escape').catch(() => {});
+                await page.waitForTimeout(200);
+            }
+        } catch (e) { }
+
         const result = await page.evaluate(() => {
             // Helper to check if an element is roughly in the center or covers the screen
             function isCentral(el) {
@@ -93,6 +137,19 @@ async function nukePopups(page) {
                 // 1. It covers more than 80% width of the screen (backdrops) OR
                 // 2. Its center X is between 20% and 80% of the screen (avoids left/right sidebars entirely)
                 return (rect.width > winW * 0.8) || (cx > winW * 0.2 && cx < winW * 0.8);
+            }
+
+            function isOtpElement(el) {
+                let curr = el;
+                for (let k = 0; k < 6; k++) {
+                    if (!curr) break;
+                    const text = (curr.innerText || curr.textContent || '').toLowerCase();
+                    if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
+                        return true;
+                    }
+                    curr = curr.parentElement;
+                }
+                return false;
             }
 
             let actionTaken = false;
@@ -119,8 +176,8 @@ async function nukePopups(page) {
                     // 1. Check all HTML attributes (e.g. src, style, data-src, etc.)
                     if (el.attributes) {
                         for (let j = 0; j < el.attributes.length; j++) {
-                            const val = el.attributes[j].value || '';
-                            if (/cross[-_](black|grey|gray|white)\.svg/.test(val)) {
+                            const val = (el.attributes[j].value || '').toLowerCase();
+                            if (/cross[-_](black|grey|gray|white)\.svg/.test(val) || val === 'close' || val.includes('close-icon') || val.includes('close-modal')) {
                                 hasSvg = true;
                                 break;
                             }
@@ -135,21 +192,16 @@ async function nukePopups(page) {
                             hasSvg = true;
                         }
                     }
+
+                    if (!hasSvg && (el.tagName === 'BUTTON' || el.tagName === 'SPAN' || el.tagName === 'DIV' || el.tagName === 'SVG')) {
+                        const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                        if (aria === 'close' || aria === 'close modal' || aria === 'dismiss') {
+                            hasSvg = true;
+                        }
+                    }
                     
                     if (hasSvg) {
-                        // Check if this close button is part of an OTP popup we want to keep open
-                        let isOtpPopup = false;
-                        let curr = el;
-                        for (let k = 0; k < 6; k++) {
-                            if (!curr) break;
-                            const text = (curr.innerText || curr.textContent || '').toLowerCase();
-                            if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
-                                isOtpPopup = true;
-                                break;
-                            }
-                            curr = curr.parentElement;
-                        }
-                        if (!isOtpPopup) {
+                        if (!isOtpElement(el)) {
                             const clickable = el.closest('button') || el.closest('a') || el;
                             if (clickable && window.getComputedStyle(clickable).display !== 'none') {
                                 // Dispatch low-level mouse click
@@ -211,7 +263,18 @@ async function nukePopups(page) {
                 'div[aria-label="Close modal"]'
             ];
             document.querySelectorAll(selectors.join(', ')).forEach(el => {
+                if (isOtpElement(el)) return;
+
                 if (isCentral(el) && isFloating(el)) {
+                    const closeInside = el.querySelector('button, svg, [aria-label*="close" i]');
+                    if (closeInside) {
+                        const clickable = closeInside.closest('button') || closeInside;
+                        try {
+                            clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            if (typeof clickable.click === 'function') clickable.click();
+                        } catch(e) {}
+                    }
+
                     if (el.style.display !== 'none') {
                         el.style.setProperty('display', 'none', 'important');
                         el.style.setProperty('pointer-events', 'none', 'important');
@@ -222,9 +285,12 @@ async function nukePopups(page) {
 
             // 3. Fallback: try organically clicking any close SVG icons ONLY in central popups
             document.querySelectorAll('svg').forEach(svg => {
-                // Heuristic for X cross icons
+                if (isOtpElement(svg)) return;
+
                 const path = svg.querySelector('path');
-                if ((svg.getAttribute('class') || '').toLowerCase().includes('close') ||
+                const aria = (svg.getAttribute('aria-label') || '').toLowerCase();
+                const cls = (svg.getAttribute('class') || '').toLowerCase();
+                if (cls.includes('close') || aria.includes('close') ||
                     (path && path.getAttribute('d') && path.getAttribute('d').length < 200 && path.getAttribute('d').includes('M'))) {
 
                     let isPopup = false;
@@ -247,11 +313,22 @@ async function nukePopups(page) {
                         try {
                             const clickable = svg.closest('button') || svg;
                             clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                            if (typeof clickable.click === 'function') clickable.click();
                             actionTaken = true;
                         } catch (e) { }
                     }
                 }
             });
+
+            // Clean up body overflow/pointer-events if a modal blocked page scrolling/clicks
+            if (document.body) {
+                if (document.body.style.overflow === 'hidden') {
+                    document.body.style.overflow = 'auto';
+                }
+                if (document.body.style.pointerEvents === 'none') {
+                    document.body.style.pointerEvents = 'auto';
+                }
+            }
 
             return { authClicked: false, actionTaken: actionTaken };
         });

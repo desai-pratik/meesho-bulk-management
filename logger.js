@@ -1,7 +1,7 @@
 const path = require('path');
 const { connectDB } = require('./db');
 
-async function logBotError(botName, username, errorMessage, page, sku = null) {
+async function logBotError(botName, username, errorMessage, page, sku = null, file = null) {
     try {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filename = `error_${botName.replace(/\s+/g, '_')}_${username}_${timestamp}.png`;
@@ -21,6 +21,7 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
             bot: botName,
             account: username,
             sku: sku,
+            file: file,
             message: errorMessage,
             screenshot: screenshotSaved ? filename : null,
             type: 'error',
@@ -39,12 +40,13 @@ async function logBotError(botName, username, errorMessage, page, sku = null) {
     }
 }
 
-async function logBotSuccess(botName, username, successMessage, sku = null) {
+async function logBotSuccess(botName, username, successMessage, sku = null, file = null) {
     try {
         const logEntry = {
             bot: botName,
             account: username,
             sku: sku,
+            file: file,
             message: successMessage,
             type: 'success',
             timestamp: new Date().toISOString()
