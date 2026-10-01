@@ -379,23 +379,59 @@ async function processAccount(browser, account, uploadFiles) {
 
                 // Step H: Click Upload/Submit
                 console.log(`[${username}] Looking for final 'Upload' button...`);
-                const submitBtn = page.getByRole('button', { name: /upload/i })
-                    .or(page.getByRole('button', { name: /submit/i }))
-                    .or(page.getByText('Upload', { exact: true }));
+                
+                const isIgnoredButton = (rawText) => {
+                    const t = (rawText || '').toLowerCase().trim();
+                    return t.includes('how to') ||
+                           t.includes('in bulk') ||
+                           t.includes('template') ||
+                           t.includes('guide') ||
+                           t.includes('help') ||
+                           t.includes('video') ||
+                           t.includes('download') ||
+                           t.includes('remove') ||
+                           t.includes('choose file');
+                };
 
                 let uploadClicked = false;
-                if (await submitBtn.count() > 0) {
-                    const buttons = await submitBtn.all();
-                    for (const btn of buttons) {
-                        if (await btn.isVisible()) {
-                            const text = await btn.innerText();
-                            if (text.toLowerCase().includes('catalog upload')) continue;
 
-                            console.log(`[${username}] Found button: ${text}. Clicking...`);
-                            await nukePopups(page); // Nuke one last time before clicking upload
+                // Priority 1: Exact match for button with name / text 'Upload' or 'Submit'
+                const exactBtn = page.getByRole('button', { name: /^upload$/i })
+                    .or(page.getByRole('button', { name: /^submit$/i }))
+                    .or(page.locator('button').filter({ hasText: /^upload$/i }))
+                    .or(page.locator('button').filter({ hasText: /^submit$/i }))
+                    .or(page.getByText('Upload', { exact: true }));
+
+                const exactCount = await exactBtn.count();
+                for (let i = 0; i < exactCount; i++) {
+                    const btn = exactBtn.nth(i);
+                    if (await btn.isVisible().catch(() => false)) {
+                        const text = (await btn.innerText().catch(() => '')).trim();
+                        if (!isIgnoredButton(text)) {
+                            console.log(`[${username}] Found exact button: "${text}". Clicking...`);
+                            await nukePopups(page);
                             await clickWithRetry(page, btn, text);
                             uploadClicked = true;
                             break;
+                        }
+                    }
+                }
+
+                // Priority 2: Fallback to broader button selector if exact match not found
+                if (!uploadClicked) {
+                    const candidateBtns = page.locator('button, [role="button"]');
+                    const candCount = await candidateBtns.count();
+                    for (let i = 0; i < candCount; i++) {
+                        const btn = candidateBtns.nth(i);
+                        if (await btn.isVisible().catch(() => false)) {
+                            const text = (await btn.innerText().catch(() => '')).trim();
+                            if (/^(upload|submit)$/i.test(text) || (text.toLowerCase().includes('upload') && !isIgnoredButton(text))) {
+                                console.log(`[${username}] Found fallback button: "${text}". Clicking...`);
+                                await nukePopups(page);
+                                await clickWithRetry(page, btn, text);
+                                uploadClicked = true;
+                                break;
+                            }
                         }
                     }
                 }
