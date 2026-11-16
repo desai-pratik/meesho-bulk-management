@@ -1,16 +1,89 @@
+// Helper function to check if an element is part of an OTP flow or "Proceed to Upload" warning modal
+function getProtectedCheckScript() {
+    return `
+        function isProtectedElement(el) {
+            let curr = el;
+            for (let k = 0; k < 8; k++) {
+                if (!curr) break;
+                const text = (curr.innerText || curr.textContent || '').toLowerCase();
+                // 1. Delivery & OTP popups
+                if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
+                    return true;
+                }
+                // 2. Feature risk warning popup (Must click "Proceed to Upload", NOT close!)
+                if (text.includes('proceed to upload') || text.includes('risk of features deactivation') || text.includes('suspected to list fake') || text.includes('watch guidelines')) {
+                    return true;
+                }
+                // 3. Outdated template toast / warning
+                if (text.includes('template version outdated') || text.includes('download latest template')) {
+                    return true;
+                }
+                curr = curr.parentElement;
+            }
+            return false;
+        }
+    `;
+}
+
+// Function to explicitly click "Proceed to Upload" popup if present on the page
+async function handleProceedToUpload(page) {
+    try {
+        const proceedBtn = page.getByRole('button', { name: /Proceed to Upload/i })
+            .or(page.locator('button, [role="button"], a').filter({ hasText: /Proceed to Upload/i }))
+            .first();
+
+        if (await proceedBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            console.log("  > [handleProceedToUpload] Detected 'Proceed to Upload' popup! Clicking 'Proceed to Upload'...");
+            await proceedBtn.click({ timeout: 3000 }).catch(() => proceedBtn.evaluate(el => el.click()));
+            await page.waitForTimeout(1500);
+            return true;
+        }
+
+        // Also check via DOM evaluation in case it's in a custom component/shadow DOM
+        const clickedViaDom = await page.evaluate(() => {
+            const candidates = Array.from(document.querySelectorAll('button, [role="button"], a, span, div'));
+            for (const el of candidates) {
+                const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                if (txt === 'proceed to upload' || (txt.includes('proceed to upload') && txt.length < 50)) {
+                    const clickable = el.closest('button') || el.closest('[role="button"]') || el;
+                    if (clickable && window.getComputedStyle(clickable).display !== 'none' && window.getComputedStyle(clickable).visibility !== 'hidden') {
+                        clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                        if (typeof clickable.click === 'function') clickable.click();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }).catch(() => false);
+
+        if (clickedViaDom) {
+            console.log("  > [handleProceedToUpload] Clicked 'Proceed to Upload' via DOM evaluation!");
+            await page.waitForTimeout(1500);
+            return true;
+        }
+    } catch (e) { }
+    return false;
+}
+
 // Function to inject background interval poller to continuously nuke popups on all navigations
 async function injectBackgroundPoller(page) {
     try {
         const script = () => {
             if (window.__nukePollerIntervalActive) return;
             window.__nukePollerIntervalActive = true;
-            
-            const isOtpElement = (el) => {
+
+            const isProtectedElement = (el) => {
                 let curr = el;
-                for (let k = 0; k < 6; k++) {
+                for (let k = 0; k < 8; k++) {
                     if (!curr) break;
                     const text = (curr.innerText || curr.textContent || '').toLowerCase();
                     if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
+                        return true;
+                    }
+                    if (text.includes('proceed to upload') || text.includes('risk of features deactivation') || text.includes('suspected to list fake') || text.includes('watch guidelines')) {
+                        return true;
+                    }
+                    if (text.includes('template version outdated') || text.includes('download latest template')) {
                         return true;
                     }
                     curr = curr.parentElement;
@@ -20,11 +93,25 @@ async function injectBackgroundPoller(page) {
 
             const runNuke = () => {
                 try {
+                    // 0. FIRST PRIORITY: If "Proceed to Upload" is visible, click it immediately! DO NOT close or hide it!
+                    const allClickables = Array.from(document.querySelectorAll('button, [role="button"], a, span, div'));
+                    for (const el of allClickables) {
+                        const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        if (txt === 'proceed to upload' || (txt.includes('proceed to upload') && txt.length < 50)) {
+                            const clickable = el.closest('button') || el.closest('[role="button"]') || el;
+                            if (clickable && window.getComputedStyle(clickable).display !== 'none' && window.getComputedStyle(clickable).visibility !== 'hidden') {
+                                clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                                if (typeof clickable.click === 'function') clickable.click();
+                                return; // Stop this cycle immediately so it can proceed
+                            }
+                        }
+                    }
+
                     // 1. Close buttons matching SVG / cross icons / close labels
                     const allEls = Array.from(document.querySelectorAll('div, span, button, a, img, svg, p, h4, h2'));
                     for (const el of allEls) {
                         let isClose = false;
-                        
+
                         // Check attributes for cross or close
                         if (el.attributes) {
                             for (let j = 0; j < el.attributes.length; j++) {
@@ -35,7 +122,7 @@ async function injectBackgroundPoller(page) {
                                 }
                             }
                         }
-                        
+
                         // Check computed style background
                         if (!isClose) {
                             const computedStyle = window.getComputedStyle(el);
@@ -52,9 +139,10 @@ async function injectBackgroundPoller(page) {
                                 isClose = true;
                             }
                         }
-                        
+
                         if (isClose) {
-                            if (isOtpElement(el)) continue;
+                            // SKIP IF PROTECTED (OTP or Proceed to Upload modal)
+                            if (isProtectedElement(el)) continue;
 
                             const clickable = el.closest('button') || el.closest('a') || el;
                             if (clickable && window.getComputedStyle(clickable).display !== 'none') {
@@ -69,7 +157,7 @@ async function injectBackgroundPoller(page) {
                     // 2. Target "NEW TEMPLATE" popup or floating dialogs specifically
                     const dialogs = Array.from(document.querySelectorAll('div[role="dialog"], .MuiModal-root, [class*="modal" i]'));
                     for (const diag of dialogs) {
-                        if (isOtpElement(diag)) continue;
+                        if (isProtectedElement(diag)) continue;
                         const diagText = (diag.innerText || '').toLowerCase();
                         if (diagText.includes('new template') || diagText.includes('wrong & defective return price') || diagText.includes('download new template')) {
                             const closeBtn = diag.querySelector('button, svg, [aria-label*="close" i], [class*="close" i]');
@@ -92,7 +180,7 @@ async function injectBackgroundPoller(page) {
 
         // 1. Inject on current page immediately
         await page.evaluate(script).catch(() => {});
-        
+
         // 2. Register for all future pages/navigations in this context
         const context = page.context();
         if (context && !context.__nukePollerRegistered) {
@@ -107,14 +195,21 @@ async function nukePopups(page) {
     try {
         await injectBackgroundPoller(page);
 
-        // Try pressing Escape in Playwright to dismiss any open modal
+        // 0. FIRST CHECK FOR "PROCEED TO UPLOAD" POPUP BEFORE ANY ESCAPE OR CLOSE
+        const proceedHandled = await handleProceedToUpload(page);
+        if (proceedHandled) {
+            return { authClicked: true, actionTaken: true };
+        }
+
+        // Try pressing Escape in Playwright to dismiss any open modal (EXCEPT Protected Modals)
         try {
             const hasModal = await page.evaluate(() => {
                 const diag = document.querySelector('div[role="dialog"], .MuiModal-root, [class*="modal" i]');
                 if (!diag) return false;
                 const text = (diag.innerText || '').toLowerCase();
-                // Avoid OTP
+                // Avoid OTP and Proceed to Upload modals
                 if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery')) return false;
+                if (text.includes('proceed to upload') || text.includes('risk of features deactivation') || text.includes('suspected to list fake') || text.includes('watch guidelines')) return false;
                 return true;
             });
             if (hasModal) {
@@ -139,12 +234,18 @@ async function nukePopups(page) {
                 return (rect.width > winW * 0.8) || (cx > winW * 0.2 && cx < winW * 0.8);
             }
 
-            function isOtpElement(el) {
+            function isProtectedElement(el) {
                 let curr = el;
-                for (let k = 0; k < 6; k++) {
+                for (let k = 0; k < 8; k++) {
                     if (!curr) break;
                     const text = (curr.innerText || curr.textContent || '').toLowerCase();
                     if (text.includes('otp') || text.includes('shadowfax') || text.includes('valmo') || text.includes('delhivery') || text.includes('ecom express') || text.includes('xpressbees')) {
+                        return true;
+                    }
+                    if (text.includes('proceed to upload') || text.includes('risk of features deactivation') || text.includes('suspected to list fake') || text.includes('watch guidelines')) {
+                        return true;
+                    }
+                    if (text.includes('template version outdated') || text.includes('download latest template')) {
                         return true;
                     }
                     curr = curr.parentElement;
@@ -156,13 +257,20 @@ async function nukePopups(page) {
             let authorisedSpecial = false;
 
             // 0. HANDLE SPECIAL AUTH POPUPS (Must click, not close!)
-            const buttonsOrLinks = Array.from(document.querySelectorAll('button, a, span'));
+            const buttonsOrLinks = Array.from(document.querySelectorAll('button, [role="button"], a, span, div'));
             for (const el of buttonsOrLinks) {
-                if (el.innerText && el.innerText.trim().toLowerCase() === 'proceed to upload') {
-                    const clickable = el.closest('button') || el;
-                    clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-                    authorisedSpecial = true;
-                    actionTaken = true;
+                const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+                if (txt === 'proceed to upload' || (txt.includes('proceed to upload') && txt.length < 50)) {
+                    const clickable = el.closest('button') || el.closest('[role="button"]') || el;
+                    if (clickable && window.getComputedStyle(clickable).display !== 'none' && window.getComputedStyle(clickable).visibility !== 'hidden') {
+                        clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                        if (typeof clickable.click === 'function') {
+                            clickable.click();
+                        }
+                        authorisedSpecial = true;
+                        actionTaken = true;
+                        break;
+                    }
                 }
             }
             if (authorisedSpecial) return { authClicked: true, actionTaken: true };
@@ -172,7 +280,7 @@ async function nukePopups(page) {
             for (const el of allElements) {
                 try {
                     let hasSvg = false;
-                    
+
                     // 1. Check all HTML attributes (e.g. src, style, data-src, etc.)
                     if (el.attributes) {
                         for (let j = 0; j < el.attributes.length; j++) {
@@ -183,7 +291,7 @@ async function nukePopups(page) {
                             }
                         }
                     }
-                    
+
                     // 2. Check stylesheet/computed background-image if not found in attributes
                     if (!hasSvg) {
                         const computedStyle = window.getComputedStyle(el);
@@ -199,9 +307,9 @@ async function nukePopups(page) {
                             hasSvg = true;
                         }
                     }
-                    
+
                     if (hasSvg) {
-                        if (!isOtpElement(el)) {
+                        if (!isProtectedElement(el)) {
                             const clickable = el.closest('button') || el.closest('a') || el;
                             if (clickable && window.getComputedStyle(clickable).display !== 'none') {
                                 // Dispatch low-level mouse click
@@ -233,6 +341,7 @@ async function nukePopups(page) {
                     el.innerText.includes('Meesho Fast Program') ||
                     (el.innerText.includes('Announcement') && !el.innerText.includes('Important Announcements'))
                 )) {
+                    if (isProtectedElement(el)) continue;
                     let parent = null;
                     let current = el;
                     while (current && current.tagName !== 'BODY') {
@@ -251,7 +360,7 @@ async function nukePopups(page) {
                 }
             }
 
-            // 2. Hide Generic Modals/Dialogs/Backdrops
+            // 2. Hide Generic Modals/Dialogs/Backdrops (EXCEPT PROTECTED ONES)
             const selectors = [
                 'div[role="dialog"]',
                 '.MuiModal-root',
@@ -263,7 +372,7 @@ async function nukePopups(page) {
                 'div[aria-label="Close modal"]'
             ];
             document.querySelectorAll(selectors.join(', ')).forEach(el => {
-                if (isOtpElement(el)) return;
+                if (isProtectedElement(el)) return;
 
                 if (isCentral(el) && isFloating(el)) {
                     const closeInside = el.querySelector('button, svg, [aria-label*="close" i]');
@@ -285,7 +394,7 @@ async function nukePopups(page) {
 
             // 3. Fallback: try organically clicking any close SVG icons ONLY in central popups
             document.querySelectorAll('svg').forEach(svg => {
-                if (isOtpElement(svg)) return;
+                if (isProtectedElement(svg)) return;
 
                 const path = svg.querySelector('path');
                 const aria = (svg.getAttribute('aria-label') || '').toLowerCase();
@@ -348,4 +457,37 @@ async function clearDashboard(page) {
     }
 }
 
-module.exports = { nukePopups, clearDashboard };
+// Dedicated helper to check immediately for upload error toasts (e.g. outdated template)
+async function checkUploadError(page) {
+    try {
+        // 1. Direct Playwright locator check for outdated template / download latest template
+        const outdatedLoc = page.getByText(/Template version outdated|download latest template/i).first();
+        if (await outdatedLoc.isVisible({ timeout: 200 }).catch(() => false)) {
+            const raw = (await outdatedLoc.innerText().catch(() => '')) || 'Template version outdated, download latest template';
+            return `Upload failed: ${raw.trim().replace(/\s+/g, ' ')}`;
+        }
+
+        // 2. High-priority DOM evaluate check across all toasts, alerts, and notifications
+        const domErr = await page.evaluate(() => {
+            const els = Array.from(document.querySelectorAll('div, span, p, [role="alert"], [class*="toast" i], [class*="snackbar" i], [class*="alert" i], [class*="notification" i]'));
+            for (const el of els) {
+                const txt = (el.innerText || el.textContent || '').trim();
+                if (!txt || txt.length > 250) continue;
+                if (/template version outdated/i.test(txt) || /download latest template/i.test(txt)) {
+                    const style = window.getComputedStyle(el);
+                    if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                        return txt.replace(/\s+/g, ' ');
+                    }
+                }
+            }
+            return null;
+        }).catch(() => null);
+
+        if (domErr) {
+            return `Upload failed: ${domErr}`;
+        }
+    } catch (e) {}
+    return null;
+}
+
+module.exports = { nukePopups, clearDashboard, handleProceedToUpload, checkUploadError };

@@ -23,7 +23,7 @@ const LOGIN_URL = 'https://supplier.meesho.com/panel/v3/new/root/login';
 const UPDATES_FILE = 'inventory_updates.csv';
 
 // Helper to read accounts
-async async function getAccounts() {
+async function getAccounts() {
     try {
         const { connectDB } = require('./db');
         const db = await connectDB();
@@ -242,15 +242,16 @@ async function updateInventoryForAccount(browser, account, updates) {
                         
                         // Success Check: Green popup or success message
                         try {
-                            const successMsg = page.getByText(/successfully|updated|request submitted/i);
+                            const successMsg = page.getByText(/successfully|updated|request submitted/i).first();
                             await successMsg.waitFor({ state: 'visible', timeout: 10000 });
-                            console.log(`[${username}] ✅ SKU ${sku} update request submitted.`);
+                            console.log(`[${username}] ✅ SKU ${sku} update request submitted successfully.`);
                             results.push({ sku, status: 'Success' });
                             await logBotSuccess(path.basename(__filename), username, `SKU ${sku} update request submitted successfully.`, sku);
                         } catch (e) {
-                            console.log(`  > Success message not detected, but request was submitted.`);
-                            results.push({ sku, status: 'Success (Check Portal)', info: 'Submitted but no confirmation seen' });
-                            await logBotSuccess(path.basename(__filename), username, `SKU ${sku} update request submitted (but no confirmation seen).`, sku);
+                            const errMsg = `Price update confirmation not seen for SKU ${sku}`;
+                            console.log(`[${username}] ❌ ${errMsg}`);
+                            results.push({ sku, status: 'Failed', reason: errMsg });
+                            await logBotError(path.basename(__filename), username, errMsg, page, sku);
                         }
                     } else {
                         const errMsg = `Could not find Price input for SKU ${sku}`;

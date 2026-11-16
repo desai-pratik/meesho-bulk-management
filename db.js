@@ -1,4 +1,12 @@
 const { MongoClient } = require('mongodb');
+const dns = require('dns');
+
+// Ensure reliable SRV DNS resolution for MongoDB Atlas on Windows/local networks
+try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+    // fallback to system resolver if setting custom servers fails
+}
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://pratikdesai2274_db_user:EzWjY6aVqJC9jiLW@cluster0.v127c7y.mongodb.net/?appName=Cluster0";
 

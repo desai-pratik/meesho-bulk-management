@@ -48,6 +48,76 @@ async function getInventoryUpdates() {
 
 
 
+// Dedicated helper to wait strictly for the stock update confirmation toast (e.g., "Stock updated successfully")
+async function waitForStockUpdateConfirmation(page, username, sku, timeoutMs = 15000) {
+    console.log(`[${username}] Waiting for confirmation toast ("Stock updated successfully") for SKU ${sku}...`);
+    const startTime = Date.now();
+    const pollInterval = 500;
+
+    while (Date.now() - startTime < timeoutMs) {
+        try {
+            // 1. Check for success toast or notification banner on page
+            const successLocators = [
+                page.getByText(/Stock updated successfully/i),
+                page.getByText(/^Stock updated successfully$/i),
+                page.locator('text=/Stock updated successfully/i'),
+                page.locator('div[role="alert"]:has-text("Stock updated successfully")'),
+                page.locator('div[role="status"]:has-text("Stock updated successfully")'),
+                page.locator('.toast-success, .alert-success, div:has-text("Stock updated successfully")'),
+                page.getByText(/Updated successfully/i)
+            ];
+
+            for (const loc of successLocators) {
+                const count = await loc.count().catch(() => 0);
+                for (let i = 0; i < count; i++) {
+                    const el = loc.nth(i);
+                    if (await el.isVisible().catch(() => false)) {
+                        let text = '';
+                        try {
+                            text = (await el.innerText()).trim();
+                        } catch (e) {
+                            text = 'Stock updated successfully';
+                        }
+                        console.log(`[${username}] ✅ Success confirmation detected: "${text}"`);
+                        await page.waitForTimeout(1000);
+                        return { success: true, message: text };
+                    }
+                }
+            }
+
+            // 2. Check for explicit error banners or toasts indicating failure
+            const errorLocators = [
+                page.locator('.toast-error, .error-message, .alert-danger'),
+                page.getByText(/failed to update stock/i),
+                page.getByText(/stock update failed/i),
+                page.getByText(/invalid stock/i),
+                page.getByText(/something went wrong/i)
+            ];
+
+            for (const errLoc of errorLocators) {
+                const count = await errLoc.count().catch(() => 0);
+                for (let i = 0; i < count; i++) {
+                    const el = errLoc.nth(i);
+                    if (await el.isVisible().catch(() => false)) {
+                        const errText = ((await el.innerText().catch(() => '')) || '').trim();
+                        if (errText && !errText.toLowerCase().includes('success')) {
+                            throw new Error(`Stock update failed: ${errText}`);
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            if (err.message && err.message.startsWith('Stock update failed:')) {
+                throw err;
+            }
+        }
+
+        await page.waitForTimeout(pollInterval);
+    }
+
+    throw new Error(`Stock update confirmation toast ("Stock updated successfully") was not received within ${timeoutMs / 1000} seconds`);
+}
+
 async function handleErrorPage(page) {
     try {
         const errorText = page.getByText('We are having trouble showing this data', { exact: false });
@@ -222,17 +292,17 @@ async function updateInventoryForAccount(browser, account, updates) {
                         await page.locator('body').click({ force: true, position: { x: 0, y: 0 } });
                         await page.waitForTimeout(2000); // Wait for the save request to process
 
-                        // Success Check: Green popup or success message
+                        // Step: Wait strictly for confirmation toast "Stock updated successfully"
                         try {
-                            const successMsg = page.getByText(/successfully|updated|saved/i);
-                            await successMsg.waitFor({ state: 'visible', timeout: 5000 });
-                            console.log(`[${username}] ✅ SKU ${sku} stock updated successfully.`);
-                            results.push({ sku, status: 'Success' });
+                            const confResult = await waitForStockUpdateConfirmation(page, username, sku, 15000);
+                            console.log(`[${username}] ✅ SKU ${sku} stock updated successfully: ${confResult.message}`);
+                            results.push({ sku, status: 'Success', message: confResult.message });
+                            // ONLY create notification / log success when confirmation toast is detected!
                             await logBotSuccess(path.basename(__filename), username, `SKU ${sku} stock updated successfully.`, sku);
-                        } catch (e) {
-                            console.log(`  > Success message not detected, but clicked outside to save.`);
-                            results.push({ sku, status: 'Success (Check Portal)', info: 'Assumed saved after click outside' });
-                            await logBotSuccess(path.basename(__filename), username, `SKU ${sku} stock updated (Assumed saved after click outside).`, sku);
+                        } catch (confErr) {
+                            console.error(`[${username}] ❌ SKU ${sku} stock update confirmation not seen: ${confErr.message}`);
+                            await logBotError(path.basename(__filename), username, `SKU ${sku} stock update failed: ${confErr.message}`, page, sku);
+                            results.push({ sku, status: 'Failed', reason: confErr.message });
                         }
                     } else {
                         const errMsg = `Could not find inline Stock input for SKU ${sku}`;

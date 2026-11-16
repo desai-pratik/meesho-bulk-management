@@ -722,6 +722,84 @@ app.get('/api/inventory-updates', async (req, res) => {
     }
 });
 
+// Helper for parsing inventory Excel
+function parseInventoryExcelFile(filePath, mode = 'price') {
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return [];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (!rows || rows.length === 0) return [];
+
+    let skuColIdx = -1;
+    let valColIdx = -1;
+    let startRowIdx = 0;
+
+    for (let r = 0; r < Math.min(5, rows.length); r++) {
+        const row = rows[r];
+        if (!Array.isArray(row)) continue;
+
+        for (let c = 0; c < row.length; c++) {
+            const cellStr = String(row[c] || '').trim().toLowerCase();
+            if (skuColIdx === -1 && (cellStr.includes('sku') || cellStr.includes('style') || cellStr.includes('item') || cellStr.includes('product') || cellStr.includes('code'))) {
+                skuColIdx = c;
+            }
+            if (valColIdx === -1) {
+                if (mode === 'price') {
+                    if (cellStr.includes('price') || cellStr.includes('mrp') || cellStr.includes('rate') || cellStr.includes('cost') || cellStr.includes('amount') || cellStr.includes('₹')) {
+                        valColIdx = c;
+                    }
+                } else {
+                    if (cellStr.includes('stock') || cellStr.includes('qty') || cellStr.includes('quantity') || cellStr.includes('count') || cellStr.includes('unit') || cellStr.includes('inventory')) {
+                        valColIdx = c;
+                    }
+                }
+            }
+        }
+
+        if (skuColIdx !== -1 && valColIdx !== -1) {
+            startRowIdx = r + 1;
+            break;
+        }
+    }
+
+    if (skuColIdx === -1) skuColIdx = 0;
+    if (valColIdx === -1) valColIdx = (skuColIdx === 0 ? 1 : 0);
+
+    const results = [];
+    const seen = new Set();
+    for (let r = startRowIdx; r < rows.length; r++) {
+        const row = rows[r];
+        if (!Array.isArray(row) || row.length === 0) continue;
+
+        let rawSku = String(row[skuColIdx] || '').trim();
+        let rawVal = row[valColIdx];
+
+        if (!rawSku) continue;
+        const lowerSku = rawSku.toLowerCase();
+        if (lowerSku === 'sku' || lowerSku === 'style id' || lowerSku === 'style_id' || lowerSku === 'item' || lowerSku === 'product sku') {
+            continue;
+        }
+
+        let cleanedVal = String(rawVal !== undefined && rawVal !== null ? rawVal : '').trim();
+        cleanedVal = cleanedVal.replace(/[₹$,\s]/g, '');
+        if (cleanedVal === '' || isNaN(Number(cleanedVal))) continue;
+
+        const numVal = Math.round(Number(cleanedVal));
+        if (numVal < 0) continue;
+
+        if (!seen.has(rawSku)) {
+            seen.add(rawSku);
+            results.push({
+                sku: rawSku,
+                [mode === 'price' ? 'price' : 'stock']: String(numVal)
+            });
+        }
+    }
+    return results;
+}
+
 app.post('/api/inventory-updates', async (req, res) => {
     try {
         const { updates } = req.body;
@@ -734,12 +812,49 @@ app.post('/api/inventory-updates', async (req, res) => {
 
         await priceColl.deleteMany({});
         if (updates.length > 0) {
-            const toInsert = updates.map(u => ({ sku: u.sku.trim(), price: u.price }));
+            const toInsert = updates.map(u => ({ sku: u.sku.trim(), price: String(u.price) }));
             await priceColl.insertMany(toInsert);
         }
 
+        res.json({ success: true, count: updates.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
-        res.json({ success: true });
+app.post('/api/inventory-updates/upload-excel', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No Excel file uploaded' });
+        }
+
+        const items = parseInventoryExcelFile(req.file.path, 'price');
+        const append = req.query.append === 'true';
+
+        const db = await connectDB();
+        const priceColl = db.collection('inventory_price_updates');
+
+        if (!append) {
+            await priceColl.deleteMany({});
+            if (items.length > 0) {
+                await priceColl.insertMany(items);
+            }
+        } else {
+            for (const item of items) {
+                await priceColl.updateOne(
+                    { sku: item.sku },
+                    { $set: item },
+                    { upsert: true }
+                );
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Excel uploaded and processed successfully. ${items.length} items parsed.`,
+            count: items.length,
+            items: items
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -768,12 +883,49 @@ app.post('/api/inventory-stock-updates', async (req, res) => {
 
         await stockColl.deleteMany({});
         if (updates.length > 0) {
-            const toInsert = updates.map(u => ({ sku: u.sku.trim(), stock: u.stock }));
+            const toInsert = updates.map(u => ({ sku: u.sku.trim(), stock: String(u.stock) }));
             await stockColl.insertMany(toInsert);
         }
 
+        res.json({ success: true, count: updates.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
-        res.json({ success: true });
+app.post('/api/inventory-stock-updates/upload-excel', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No Excel file uploaded' });
+        }
+
+        const items = parseInventoryExcelFile(req.file.path, 'stock');
+        const append = req.query.append === 'true';
+
+        const db = await connectDB();
+        const stockColl = db.collection('inventory_stock_updates');
+
+        if (!append) {
+            await stockColl.deleteMany({});
+            if (items.length > 0) {
+                await stockColl.insertMany(items);
+            }
+        } else {
+            for (const item of items) {
+                await stockColl.updateOne(
+                    { sku: item.sku },
+                    { $set: item },
+                    { upsert: true }
+                );
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Excel uploaded and processed successfully. ${items.length} items parsed.`,
+            count: items.length,
+            items: items
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

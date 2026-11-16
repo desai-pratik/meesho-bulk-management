@@ -1,5 +1,5 @@
 const { logBotError, logBotSuccess } = require('./logger');
-const { nukePopups, clearDashboard } = require('./nuke_helper');
+const { nukePopups, clearDashboard, handleProceedToUpload, checkUploadError } = require('./nuke_helper');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -66,6 +66,13 @@ async function waitForBulkUploadConfirmation(page, username, fileName, timeoutMs
 
     while (Date.now() - startTime < timeoutMs) {
         try {
+            // 0. CHECK IMMEDIATELY FOR OUTDATED TEMPLATE OR UPLOAD ERRORS (Skip waiting 60s!)
+            const instantErr = await checkUploadError(page);
+            if (instantErr) {
+                console.error(`[${username}] ❌ Immediate upload error detected: "${instantErr}"`);
+                throw new Error(instantErr);
+            }
+
             // 1. Check for success toast or banner on page
             const successLocators = [
                 page.getByText(/File (has been )?uploaded successfully/i),
@@ -99,7 +106,9 @@ async function waitForBulkUploadConfirmation(page, username, fileName, timeoutMs
 
             // 2. Check for explicit error banners or toasts indicating upload failure
             const errorLocators = [
-                page.locator('.toast-error, .error-message, .alert-danger'),
+                page.getByText(/template version outdated/i),
+                page.getByText(/download latest template/i),
+                page.locator('.toast-error, .error-message, .alert-danger, [role="alert"]'),
                 page.getByText(/upload failed/i),
                 page.getByText(/failed to upload/i),
                 page.getByText(/invalid file/i),
@@ -233,8 +242,14 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                 } catch (e) { /* ignore evaluate error */ }
             }
 
+            // Immediately check and handle "Proceed to Upload" popup if triggered
+            await handleProceedToUpload(page);
+
             // Immediately nuke popups that might have been triggered by clicking
-            await nukePopups(page);
+            const postNuke = await nukePopups(page);
+            if (postNuke && postNuke.authClicked) {
+                await page.waitForTimeout(1500);
+            }
 
             // 4. Verify (if provided)
             if (verifyLocator) {
@@ -244,6 +259,13 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
                     return; // Success!
                 } catch (e) {
                     console.log(`  > Clicked '${name}', but next step didn't appear in 5s.`);
+                    const proceedClicked = await handleProceedToUpload(page);
+                    if (proceedClicked) {
+                        try {
+                            await resolvedVerify.waitFor({ state: 'visible', timeout: 5000 });
+                            return; // Success after proceeding!
+                        } catch (err2) {}
+                    }
                     await nukePopups(page);
 
                     const handled = await handleErrorPage(page);
@@ -370,6 +392,13 @@ async function processAccount(browser, account, uploadFiles) {
                 console.log(`[${username}] File selected: ${fileName}`);
                 await randomDelay(page); // Keep a small delay here for file to attach
 
+                // Check immediately if selecting file triggered "Template version outdated"
+                const fileSelectErr = await checkUploadError(page);
+                if (fileSelectErr) {
+                    console.error(`[${username}] ❌ File selection error: "${fileSelectErr}". Moving to next file immediately...`);
+                    throw new Error(fileSelectErr);
+                }
+
                 // Step H: Click Upload/Submit
                 console.log(`[${username}] Looking for final 'Upload' button...`);
                 
@@ -431,6 +460,13 @@ async function processAccount(browser, account, uploadFiles) {
 
                 if (!uploadClicked) {
                     throw new Error("Final 'Upload' button was not found or could not be clicked");
+                }
+
+                // Check immediately before waiting if error appeared upon click
+                const preWaitErr = await checkUploadError(page);
+                if (preWaitErr) {
+                    console.error(`[${username}] ❌ Upload error: "${preWaitErr}". Moving to next file immediately...`);
+                    throw new Error(preWaitErr);
                 }
 
                 // Step I: Wait strictly for confirmation toast "File has been uploaded successfully"
