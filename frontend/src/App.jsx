@@ -36,7 +36,11 @@ window.fetch = async (url, options = {}) => {
     try {
       const clone = response.clone();
       const data = await clone.json();
-      if (data.error === 'Invalid or expired token' || data.error === 'Unauthorized') {
+      if (
+        data.error === 'Invalid or expired token' ||
+        data.error === 'Unauthorized' ||
+        data.error === 'Access denied: No token provided'
+      ) {
         window.dispatchEvent(new Event('auth-error'));
       }
     } catch (e) {

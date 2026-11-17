@@ -125,7 +125,7 @@ async function ensureOnInventoryPage(page) {
     for (let attempt = 0; attempt < 3; attempt++) {
         // 1. If search box is already visible on the inventory table, clear it and return
         if (await searchBox.isVisible({ timeout: 1500 }).catch(() => false)) {
-            await searchBox.fill('').catch(() => {});
+            await searchBox.fill('').catch(() => { });
             await page.waitForTimeout(500);
             return true;
         }
@@ -154,7 +154,7 @@ async function ensureOnInventoryPage(page) {
         // 3. Check for back arrow / back button on Edit Product header
         const backBtn = page.locator('div, span, button, a').filter({ hasText: /Edit Product/i }).locator('svg, button, a').first();
         if (await backBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-            await backBtn.click().catch(() => {});
+            await backBtn.click().catch(() => { });
             await page.waitForTimeout(1000);
         }
 
@@ -169,14 +169,14 @@ async function ensureOnInventoryPage(page) {
         // 5. Try browser back
         if (!(await searchBox.isVisible({ timeout: 1500 }).catch(() => false))) {
             console.log("  > Trying browser goBack()...");
-            await page.goBack().catch(() => {});
+            await page.goBack().catch(() => { });
             await page.waitForTimeout(2000);
         }
 
-        await nukePopups(page).catch(() => {});
+        await nukePopups(page).catch(() => { });
 
         if (await searchBox.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await searchBox.fill('').catch(() => {});
+            await searchBox.fill('').catch(() => { });
             await page.waitForTimeout(500);
             return true;
         }
@@ -188,16 +188,16 @@ async function ensureOnInventoryPage(page) {
     if (curUrl.includes('/edit-product') || !curUrl.includes('/inventory')) {
         const inventoryUrl = curUrl.replace(/\/edit-product.*$/, '/inventory');
         if (inventoryUrl !== curUrl && inventoryUrl.includes('/inventory')) {
-            await page.goto(inventoryUrl, { timeout: 20000 }).catch(() => {});
+            await page.goto(inventoryUrl, { timeout: 20000 }).catch(() => { });
         } else {
-            await page.goto('https://supplier.meesho.com/panel/v3/new/growth/inventory', { timeout: 20000 }).catch(() => {});
+            await page.goto('https://supplier.meesho.com/panel/v3/new/growth/inventory', { timeout: 20000 }).catch(() => { });
         }
-        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-        await clearDashboard(page).catch(() => {});
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => { });
+        await clearDashboard(page).catch(() => { });
     }
 
     if (await searchBox.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await searchBox.fill('').catch(() => {});
+        await searchBox.fill('').catch(() => { });
         return true;
     }
 
@@ -223,7 +223,7 @@ async function updateInventoryForAccount(browser, account, updates) {
         await page.getByRole('textbox', { name: 'Email Id or mobile number' }).fill(username);
         await page.getByRole('textbox', { name: 'Password' }).fill(password);
         await page.getByRole('button', { name: 'Log in', exact: true }).click();
-        
+
         try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) { }
         await clearDashboard(page);
 
@@ -235,20 +235,23 @@ async function updateInventoryForAccount(browser, account, updates) {
         for (const update of updates) {
             const { sku, price } = update;
             console.log(`\n[${username}] Processing SKU: ${sku} -> Price: ${price}`);
-            
-            try {
-                // Ensure browser is on Inventory page with search input ready
-                const ready = await ensureOnInventoryPage(page);
-                if (!ready) {
-                    throw new Error("Could not return to or verify Inventory page");
-                }
 
-                // Search for SKU
-                const searchBox = page.getByPlaceholder(/search by/i).first(); 
-                await searchBox.waitFor({ state: 'visible', timeout: 10000 });
-                await searchBox.fill(''); 
-                await searchBox.fill(sku);
-                
+            try {
+                // Search for SKU — retry once with a page reload if the search box is not found
+                const searchBox = page.getByPlaceholder(/search by/i).first();
+                try {
+                    await searchBox.waitFor({ state: 'visible', timeout: 20000 });
+                } catch (e) {
+                    console.log(`  > Search box not visible, reloading inventory page...`);
+                    const inventoryMenu = page.getByText('Inventory', { exact: true }).first();
+                    await clickWithRetry(page, inventoryMenu, 'Inventory Menu (retry)');
+                    await page.waitForTimeout(4000);
+                    await nukePopups(page);
+                    await searchBox.waitFor({ state: 'visible', timeout: 15000 });
+                }
+                await searchBox.fill('');
+                await searchBox.fill(String(sku));
+
                 // Wait for and click the SKU in the dropdown
                 const dropdownItem = page.getByText(`Style ID/SKU: ${sku}`, { exact: false });
                 try {
@@ -258,27 +261,27 @@ async function updateInventoryForAccount(browser, account, updates) {
                     console.log(`  > Dropdown for ${sku} did not appear. Pressing Enter...`);
                     await page.keyboard.press('Enter');
                 }
-                
+
                 await page.waitForTimeout(3000); // Wait for table to load
 
                 // Find the "Edit" button in the Actions column for the specific SKU
                 // We look for a row that contains the SKU and then find the Edit button in it
                 const skuRow = page.locator('tr').filter({ hasText: sku }).first();
                 const editBtn = skuRow.locator('div, span, button').filter({ hasText: /^Edit$/ }).first();
-                
+
                 if (await editBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
                     await clickWithRetry(page, editBtn, `Edit button for ${sku}`);
                     await page.waitForTimeout(3000); // Wait for Edit page to load
 
                     // Wait for and find Price input on Edit Product page
                     let finalInput = null;
-                    
+
                     // Strategy 1: Wait for exact name attribute (input[name="meesho_price"])
                     try {
                         const exactInput = page.locator('input[name="meesho_price"]').first();
                         await exactInput.waitFor({ state: 'visible', timeout: 6000 });
                         finalInput = exactInput;
-                    } catch (e) {}
+                    } catch (e) { }
 
                     // Strategy 2: Find input by walking up from "Meesho Price" text
                     if (!finalInput) {
@@ -290,7 +293,7 @@ async function updateInventoryForAccount(browser, account, updates) {
                             if (await inputInContainer.isVisible()) {
                                 finalInput = inputInContainer;
                             }
-                        } catch (e) {}
+                        } catch (e) { }
                     }
 
                     // Strategy 3: Find input in price table
@@ -300,7 +303,7 @@ async function updateInventoryForAccount(browser, account, updates) {
                             if (await tableInput.isVisible({ timeout: 2000 })) {
                                 finalInput = tableInput;
                             }
-                        } catch (e) {}
+                        } catch (e) { }
                     }
 
                     // Strategy 4: Fallback to more generic but restricted selectors
@@ -319,15 +322,17 @@ async function updateInventoryForAccount(browser, account, updates) {
                     }
 
                     if (finalInput && await finalInput.isVisible()) {
+                        // Ensure price is always a string for Playwright fill()
+                        const priceStr = String(price);
                         // Calculate return price (Meesho Price - 10)
-                        const returnPrice = (parseInt(price) - 10).toString();
-                        
+                        const returnPrice = String(Number(price) - 10);
+
                         // Fill Meesho Price
                         await finalInput.click();
                         await page.keyboard.press('Control+A');
                         await page.keyboard.press('Backspace');
-                        await finalInput.fill(price);
-                        
+                        await finalInput.fill(priceStr);
+
                         // Fill Wrong/Defective Returns Price
                         const returnInput = page.locator('input[name="only_wrong_return_price"]')
                             .or(page.locator('input[name*="wrong_return"]'))
@@ -339,17 +344,17 @@ async function updateInventoryForAccount(browser, account, updates) {
                             await page.keyboard.press('Control+A');
                             await page.keyboard.press('Backspace');
                             await returnInput.fill(returnPrice);
-                            console.log(`  > Prices filled: Meesho=${price}, Return=${returnPrice}.`);
+                            console.log(`  > Prices filled: Meesho=${priceStr}, Return=${returnPrice}.`);
                         } else {
-                            console.log(`  > Prices filled: Meesho=${price}. Return field not found.`);
+                            console.log(`  > Prices filled: Meesho=${priceStr}. Return field not found.`);
                         }
 
                         console.log(`  > Clicking Submit Request...`);
-                        
+
                         // Submit
                         const submitBtn = page.getByRole('button', { name: 'Submit Request', exact: true });
                         await clickWithRetry(page, submitBtn, `Submit Request for ${sku}`);
-                        
+
                         // Success Check: Green popup or success message
                         try {
                             const successMsg = page.getByText(/successfully|updated|request submitted/i).first();
@@ -374,6 +379,16 @@ async function updateInventoryForAccount(browser, account, updates) {
                     console.log(`[${username}] ❌ ${errMsg} for ${sku}.`);
                     await logBotError(path.basename(__filename), username, errMsg, page, sku);
                     results.push({ sku, status: 'Failed', reason: errMsg });
+                }
+
+                // Reset search for next SKU: go back to Inventory and wait for the search box to be ready
+                try {
+                    const inventoryMenu = page.getByText('Inventory', { exact: true }).first();
+                    await clickWithRetry(page, inventoryMenu, 'Inventory Menu');
+                    await page.waitForTimeout(3000);
+                    await nukePopups(page);
+                } catch (e) {
+                    console.log("  > Error resetting to Inventory: " + e.message);
                 }
 
             } catch (e) {

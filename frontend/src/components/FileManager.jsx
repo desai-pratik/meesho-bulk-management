@@ -12,9 +12,10 @@ function FileManager({ onUpdateFileCount }) {
     fetch(`${BACKEND_URL}/api/files`)
       .then(res => res.json())
       .then(data => {
-        setFiles(data);
-        setSelectedFiles(prev => prev.filter(name => data.some(f => f.name === name)));
-        if (onUpdateFileCount) onUpdateFileCount(data.length);
+        const list = Array.isArray(data) ? data : [];
+        setFiles(list);
+        setSelectedFiles(prev => prev.filter(name => list.some(f => f.name === name)));
+        if (onUpdateFileCount) onUpdateFileCount(list.length);
       })
       .catch(err => console.error(err));
   };

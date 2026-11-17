@@ -37,7 +37,7 @@ function Dashboard({ scripts, onTrigger }) {
   const fetchAccounts = () => {
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
-      .then(data => setAccounts(data))
+      .then(data => setAccounts(Array.isArray(data) ? data : []))
       .catch(err => console.error("Error fetching accounts:", err));
   };
 
@@ -49,8 +49,8 @@ function Dashboard({ scripts, onTrigger }) {
     return () => clearInterval(interval);
   }, []);
 
-  const chartData = stats.map(stat => {
-    const acc = accounts.find(a => a.username === stat.account);
+  const chartData = (Array.isArray(stats) ? stats : []).map(stat => {
+    const acc = Array.isArray(accounts) ? accounts.find(a => a.username === stat.account) : null;
     return {
       ...stat,
       displayName: acc && acc.name ? acc.name : stat.account.split('@')[0],

@@ -980,6 +980,63 @@ app.post('/api/inventory-stock-updates/upload-excel', upload.single('file'), asy
     }
 });
 
+// Inventory Excel Upload (Price)
+app.post('/api/inventory-updates/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const filePath = req.file.path;
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        const parsed = [];
+        for (const row of rows) {
+            // Accept headers case-insensitively
+            const sku = (row['SKU'] || row['sku'] || row['Style ID'] || row['style_id'] || row['StyleID'] || '').toString().trim();
+            const price = (row['Price'] || row['price'] || row['New Price'] || row['MRP'] || row['mrp'] || '').toString().trim();
+            if (sku && price) {
+                parsed.push({ sku, price: Number(price) });
+            }
+        }
+
+        // Clean up uploaded file
+        fs.unlink(filePath, () => {});
+
+        res.json({ success: true, count: parsed.length, rows: parsed });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Inventory Excel Upload (Stock)
+app.post('/api/inventory-stock-updates/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        const filePath = req.file.path;
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        const parsed = [];
+        for (const row of rows) {
+            const sku = (row['SKU'] || row['sku'] || row['Style ID'] || row['style_id'] || row['StyleID'] || '').toString().trim();
+            const stock = (row['Stock'] || row['stock'] || row['Quantity'] || row['quantity'] || row['qty'] || row['QTY'] || '').toString().trim();
+            if (sku && stock) {
+                parsed.push({ sku, stock: Number(stock) });
+            }
+        }
+
+        // Clean up uploaded file
+        fs.unlink(filePath, () => {});
+
+        res.json({ success: true, count: parsed.length, rows: parsed });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Single Catalog Defaults
 app.get('/api/single-catalog-defaults', async (req, res) => {
     try {

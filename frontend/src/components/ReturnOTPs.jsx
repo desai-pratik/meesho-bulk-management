@@ -20,7 +20,7 @@ function ReturnOTPs({ scripts, onTrigger }) {
   const fetchOtps = () => {
     fetch(`${BACKEND_URL}/api/return-otps`)
       .then(res => res.json())
-      .then(data => setOtps(data))
+      .then(data => setOtps(Array.isArray(data) ? data : []))
       .catch(err => console.error("Error fetching return OTPs:", err));
   };
 

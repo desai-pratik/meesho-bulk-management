@@ -27,7 +27,7 @@ function Notifications() {
     fetch(`${BACKEND_URL}/api/errors`)
       .then(res => res.json())
       .then(data => {
-        setErrors(data || []);
+        setErrors(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
