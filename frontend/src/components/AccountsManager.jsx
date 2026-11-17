@@ -1,24 +1,65 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Search } from 'lucide-react';
+import { Plus, Trash2, Save, Search, CheckCircle2 } from 'lucide-react';
 import { BACKEND_URL } from '../config';
+
+const LOCAL_STORAGE_KEY = 'selected_accounts';
 
 function AccountsManager({ scripts, onTrigger }) {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [syncStatus, setSyncStatus] = useState('');
 
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
       .then(data => {
-        setAccounts(data);
+        let localSelection = null;
+        try {
+          const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+              localSelection = parsed;
+            }
+          }
+        } catch (e) {
+          console.error("Error reading localStorage selection:", e);
+        }
+
+        const merged = Array.isArray(data) ? data.map(acc => {
+          const isSelected = (localSelection && localSelection[acc.username] !== undefined)
+            ? localSelection[acc.username]
+            : (acc.isActive !== false);
+          return {
+            ...acc,
+            isActive: isSelected
+          };
+        }) : [];
+
+        setAccounts(merged);
         setLoading(false);
+
+        // Keep localStorage updated with initial map
+        const initialMap = {};
+        merged.forEach(a => { if (a.username) initialMap[a.username] = a.isActive !== false; });
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialMap));
+        } catch (e) {}
       })
       .catch(err => {
         console.error(err);
         setLoading(false);
       });
   }, []);
+
+  const syncSelectionToBackend = (selectionMap) => {
+    fetch(`${BACKEND_URL}/api/local-account-selection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selection: selectionMap })
+    }).catch(err => console.error("Error syncing local selection to backend:", err));
+  };
 
   const addAccount = () => {
     setAccounts([...accounts, { username: '', password: '', name: '', isActive: true }]);
@@ -28,28 +69,59 @@ function AccountsManager({ scripts, onTrigger }) {
     const newAccounts = [...accounts];
     newAccounts[index][field] = value;
     setAccounts(newAccounts);
+
+    if (field === 'isActive') {
+      const selectionMap = {};
+      newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+      } catch (e) {}
+      syncSelectionToBackend(selectionMap);
+      setSyncStatus('Selection saved locally');
+      setTimeout(() => setSyncStatus(''), 2500);
+    }
   };
 
   const toggleAllAccounts = (checked) => {
     const newAccounts = accounts.map(acc => ({ ...acc, isActive: checked }));
     setAccounts(newAccounts);
+
+    const selectionMap = {};
+    newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = checked; });
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+    } catch (e) {}
+    syncSelectionToBackend(selectionMap);
+    setSyncStatus('Selection saved locally');
+    setTimeout(() => setSyncStatus(''), 2500);
   };
 
   const removeAccount = (index) => {
+    const removedAcc = accounts[index];
     const newAccounts = accounts.filter((_, i) => i !== index);
     setAccounts(newAccounts);
+
+    if (removedAcc && removedAcc.username) {
+      const selectionMap = {};
+      newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+      } catch (e) {}
+      syncSelectionToBackend(selectionMap);
+    }
   };
 
   const saveAccounts = async () => {
     try {
+      const validAccounts = accounts.filter(a => a.username && a.password);
       const res = await fetch(`${BACKEND_URL}/api/accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accounts: accounts.filter(a => a.username && a.password) })
+        body: JSON.stringify({ accounts: validAccounts })
       });
       const data = await res.json();
       if (data.success) {
-        alert("Accounts saved successfully!");
+        alert("Accounts saved successfully! (Selection state stored locally, not in MongoDB)");
       }
     } catch (e) {
       console.error(e);
@@ -57,13 +129,22 @@ function AccountsManager({ scripts, onTrigger }) {
     }
   };
 
-
   if (loading) return <div className="glass-panel">Loading accounts...</div>;
 
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 85px)', overflow: 'hidden', paddingRight: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
-        <h2 style={{ fontSize: '1.4rem' }}>Manage Meesho Accounts</h2>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', margin: 0 }}>Manage Meesho Accounts</h2>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>Account selection is saved locally (not in MongoDB)</span>
+            {syncStatus && (
+              <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                • {syncStatus}
+              </span>
+            )}
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <div style={{ position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -95,7 +176,7 @@ function AccountsManager({ scripts, onTrigger }) {
                   style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
                   checked={accounts.length > 0 && accounts.every(a => a.isActive !== false)}
                   onChange={(e) => toggleAllAccounts(e.target.checked)}
-                  title="Toggle all accounts"
+                  title="Toggle all accounts (saved locally)"
                 />
               </th>
               <th>Email / Phone</th>
@@ -123,7 +204,7 @@ function AccountsManager({ scripts, onTrigger }) {
                         style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
                         checked={acc.isActive !== false}
                         onChange={(e) => updateAccount(idx, 'isActive', e.target.checked)}
-                        title="Include this account when running bots"
+                        title="Include this account when running bots (saved locally)"
                       />
                     </td>
                     <td>

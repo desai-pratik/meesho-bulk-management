@@ -24,16 +24,10 @@ const FILE_PATH = path.join(__dirname, 'uploaded-files');
 // Helper to read accounts
 async function getAccounts() {
     try {
-        const { connectDB } = require('./db');
-        const db = await connectDB();
-        const query = { isActive: true };
-        if (process.env.TARGET_ACCOUNT) {
-            query.username = process.env.TARGET_ACCOUNT;
-        }
-        const accounts = await db.collection('accounts').find(query).toArray();
-        return accounts;
+        const { getAccounts } = require('./accounts_helper');
+        return await getAccounts();
     } catch (e) {
-        console.error("Error fetching accounts from DB:", e.message);
+        console.error("Error fetching accounts:", e.message);
         return [];
     }
 }

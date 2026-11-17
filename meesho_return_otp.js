@@ -46,19 +46,10 @@ async function updateReturnOTPs(username, extractedOtps) {
 
 async function loadAccounts() {
     try {
-        const { connectDB } = require('./db');
-        const db = await connectDB();
-        let allAccounts = await db.collection('accounts').find({ isActive: true }).toArray();
-
-        // If TARGET_ACCOUNT is set, filter for it (supports comma-separated list of accounts)
-        if (process.env.TARGET_ACCOUNT) {
-            const targets = process.env.TARGET_ACCOUNT.split(',').map(t => t.trim());
-            allAccounts = allAccounts.filter(acc => targets.includes(acc.username));
-        }
-
-        return allAccounts;
+        const { loadAccounts } = require('./accounts_helper');
+        return await loadAccounts();
     } catch (e) {
-        console.error("Error fetching accounts from DB:", e.message);
+        console.error("Error fetching accounts:", e.message);
         return [];
     }
 }

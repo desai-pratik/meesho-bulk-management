@@ -25,12 +25,10 @@ const UPDATES_FILE = 'inventory_updates.csv';
 // Helper to read accounts
 async function getAccounts() {
     try {
-        const { connectDB } = require('./db');
-        const db = await connectDB();
-        const accounts = await db.collection('accounts').find({ isActive: true }).toArray();
-        return accounts;
+        const { getAccounts } = require('./accounts_helper');
+        return await getAccounts();
     } catch (e) {
-        console.error("Error fetching accounts from DB:", e.message);
+        console.error("Error fetching accounts:", e.message);
         return [];
     }
 }
@@ -120,6 +118,92 @@ async function clickWithRetry(page, locator, name, verifyLocator = null) {
     throw new Error(`Failed to click '${name}' after 5 attempts.`);
 }
 
+// Dedicated helper to ensure the browser is on the Inventory page with search input ready
+async function ensureOnInventoryPage(page) {
+    const searchBox = page.getByPlaceholder(/search by/i).first();
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        // 1. If search box is already visible on the inventory table, clear it and return
+        if (await searchBox.isVisible({ timeout: 1500 }).catch(() => false)) {
+            await searchBox.fill('').catch(() => {});
+            await page.waitForTimeout(500);
+            return true;
+        }
+
+        // 2. If stuck on "Edit Product" page, click "Discard and Go Back"
+        const discardBtn = page.getByRole('button', { name: /Discard and Go Back/i })
+            .or(page.locator('button, [role="button"]').filter({ hasText: /Discard and Go Back/i }))
+            .first();
+
+        if (await discardBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            console.log("  > Detected 'Edit Product' page. Clicking 'Discard and Go Back'...");
+            await discardBtn.click({ timeout: 3000 }).catch(() => discardBtn.evaluate(el => el.click()));
+            await page.waitForTimeout(1500);
+
+            // Handle possible confirmation modal ("Discard changes?")
+            const confirmDiscard = page.getByRole('button', { name: /^(discard|discard changes|yes|leave)$/i })
+                .or(page.locator('button').filter({ hasText: /Discard/i }))
+                .first();
+            if (await confirmDiscard.isVisible({ timeout: 1000 }).catch(() => false)) {
+                console.log("  > Confirming discard dialog...");
+                await confirmDiscard.click().catch(() => confirmDiscard.evaluate(el => el.click()));
+                await page.waitForTimeout(1500);
+            }
+        }
+
+        // 3. Check for back arrow / back button on Edit Product header
+        const backBtn = page.locator('div, span, button, a').filter({ hasText: /Edit Product/i }).locator('svg, button, a').first();
+        if (await backBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+            await backBtn.click().catch(() => {});
+            await page.waitForTimeout(1000);
+        }
+
+        // 4. Try clicking Inventory menu in sidebar if available
+        const inventoryMenu = page.getByText('Inventory', { exact: true }).first();
+        if (await inventoryMenu.isVisible({ timeout: 1500 }).catch(() => false)) {
+            console.log("  > Clicking Inventory sidebar menu...");
+            await inventoryMenu.click().catch(() => inventoryMenu.evaluate(el => el.click()));
+            await page.waitForTimeout(2000);
+        }
+
+        // 5. Try browser back
+        if (!(await searchBox.isVisible({ timeout: 1500 }).catch(() => false))) {
+            console.log("  > Trying browser goBack()...");
+            await page.goBack().catch(() => {});
+            await page.waitForTimeout(2000);
+        }
+
+        await nukePopups(page).catch(() => {});
+
+        if (await searchBox.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await searchBox.fill('').catch(() => {});
+            await page.waitForTimeout(500);
+            return true;
+        }
+    }
+
+    // 6. Final Fallback: Direct URL Navigation
+    console.log("  > Fallback: Navigating directly to Inventory URL...");
+    const curUrl = page.url();
+    if (curUrl.includes('/edit-product') || !curUrl.includes('/inventory')) {
+        const inventoryUrl = curUrl.replace(/\/edit-product.*$/, '/inventory');
+        if (inventoryUrl !== curUrl && inventoryUrl.includes('/inventory')) {
+            await page.goto(inventoryUrl, { timeout: 20000 }).catch(() => {});
+        } else {
+            await page.goto('https://supplier.meesho.com/panel/v3/new/growth/inventory', { timeout: 20000 }).catch(() => {});
+        }
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+        await clearDashboard(page).catch(() => {});
+    }
+
+    if (await searchBox.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await searchBox.fill('').catch(() => {});
+        return true;
+    }
+
+    return false;
+}
+
 async function updateInventoryForAccount(browser, account, updates) {
     const { username, password } = account;
     console.log(`\n=== Starting Inventory Update for Account: ${username} ===`);
@@ -145,17 +229,20 @@ async function updateInventoryForAccount(browser, account, updates) {
 
         // 2. Go to Inventory
         console.log(`[${username}] Navigating to Inventory...`);
-        const inventoryMenu = page.getByText('Inventory', { exact: true }).first();
-        await clickWithRetry(page, inventoryMenu, 'Inventory Menu');
-        await page.waitForTimeout(3000);
-        await nukePopups(page);
+        await ensureOnInventoryPage(page);
 
         // 3. Process SKUs
         for (const update of updates) {
             const { sku, price } = update;
-            console.log(`[${username}] Processing SKU: ${sku} -> Price: ${price}`);
+            console.log(`\n[${username}] Processing SKU: ${sku} -> Price: ${price}`);
             
             try {
+                // Ensure browser is on Inventory page with search input ready
+                const ready = await ensureOnInventoryPage(page);
+                if (!ready) {
+                    throw new Error("Could not return to or verify Inventory page");
+                }
+
                 // Search for SKU
                 const searchBox = page.getByPlaceholder(/search by/i).first(); 
                 await searchBox.waitFor({ state: 'visible', timeout: 10000 });
@@ -179,37 +266,56 @@ async function updateInventoryForAccount(browser, account, updates) {
                 const skuRow = page.locator('tr').filter({ hasText: sku }).first();
                 const editBtn = skuRow.locator('div, span, button').filter({ hasText: /^Edit$/ }).first();
                 
-                if (await editBtn.isVisible()) {
+                if (await editBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
                     await clickWithRetry(page, editBtn, `Edit button for ${sku}`);
-                    await page.waitForTimeout(4000); // Wait for Edit page to load
+                    await page.waitForTimeout(3000); // Wait for Edit page to load
 
-                    // Update Meesho Price
-                    // Based on the error log, the input has name="meesho_price"
+                    // Wait for and find Price input on Edit Product page
                     let finalInput = null;
                     
-                    // Strategy 1: Use exact name attribute (Confirmed from error log)
-                    const exactInput = page.locator('input[name="meesho_price"]').first();
-                    if (await exactInput.isVisible()) {
+                    // Strategy 1: Wait for exact name attribute (input[name="meesho_price"])
+                    try {
+                        const exactInput = page.locator('input[name="meesho_price"]').first();
+                        await exactInput.waitFor({ state: 'visible', timeout: 6000 });
                         finalInput = exactInput;
-                    }
+                    } catch (e) {}
 
                     // Strategy 2: Find input by walking up from "Meesho Price" text
                     if (!finalInput) {
-                        const priceLabel = page.getByText('Meesho Price', { exact: false }).first();
-                        if (await priceLabel.isVisible()) {
+                        try {
+                            const priceLabel = page.getByText('Meesho Price', { exact: false }).first();
+                            await priceLabel.waitFor({ state: 'visible', timeout: 3000 });
                             const container = priceLabel.locator('..').locator('..');
                             const inputInContainer = container.locator('input').first();
                             if (await inputInContainer.isVisible()) {
                                 finalInput = inputInContainer;
                             }
-                        }
+                        } catch (e) {}
                     }
 
-                    // Strategy 3: Fallback to more generic but restricted selectors
-                    if (!finalInput || !(await finalInput.isVisible())) {
-                        finalInput = page.locator('input[name*="price"]').first()
-                            .or(page.getByPlaceholder(/₹/).first())
-                            .or(page.locator('input[type="number"]').filter({ has: page.locator('..').getByText(/price/i) }).first());
+                    // Strategy 3: Find input in price table
+                    if (!finalInput) {
+                        try {
+                            const tableInput = page.locator('table input, [role="table"] input').first();
+                            if (await tableInput.isVisible({ timeout: 2000 })) {
+                                finalInput = tableInput;
+                            }
+                        } catch (e) {}
+                    }
+
+                    // Strategy 4: Fallback to more generic but restricted selectors
+                    if (!finalInput) {
+                        const fallbacks = [
+                            page.locator('input[name*="price"]').first(),
+                            page.getByPlaceholder(/₹/).first(),
+                            page.locator('input[type="number"]').filter({ has: page.locator('..').getByText(/price/i) }).first()
+                        ];
+                        for (const fb of fallbacks) {
+                            if (await fb.isVisible({ timeout: 1500 }).catch(() => false)) {
+                                finalInput = fb;
+                                break;
+                            }
+                        }
                     }
 
                     if (finalInput && await finalInput.isVisible()) {
@@ -223,8 +329,12 @@ async function updateInventoryForAccount(browser, account, updates) {
                         await finalInput.fill(price);
                         
                         // Fill Wrong/Defective Returns Price
-                        const returnInput = page.locator('input[name="only_wrong_return_price"]').first();
-                        if (await returnInput.isVisible()) {
+                        const returnInput = page.locator('input[name="only_wrong_return_price"]')
+                            .or(page.locator('input[name*="wrong_return"]'))
+                            .or(page.locator('input[name*="return_price"]'))
+                            .or(page.locator('input[name*="return"]'))
+                            .first();
+                        if (await returnInput.isVisible({ timeout: 1500 }).catch(() => false)) {
                             await returnInput.click();
                             await page.keyboard.press('Control+A');
                             await page.keyboard.press('Backspace');
@@ -265,20 +375,18 @@ async function updateInventoryForAccount(browser, account, updates) {
                     await logBotError(path.basename(__filename), username, errMsg, page, sku);
                     results.push({ sku, status: 'Failed', reason: errMsg });
                 }
-                
-                // Reset search for next SKU safely by clicking Inventory menu again
-                try {
-                    const inventoryMenu = page.getByText('Inventory', { exact: true }).first();
-                    await clickWithRetry(page, inventoryMenu, 'Inventory Menu');
-                    await page.waitForTimeout(1000);
-                } catch (e) {
-                    console.log("  > Error resetting to Inventory: " + e.message);
-                }
 
             } catch (e) {
                 console.error(`[${username}] Error processing SKU ${sku}:`, e.message);
                 await logBotError(path.basename(__filename), username, e.message, page, sku);
                 results.push({ sku, status: 'Error', reason: e.message });
+            } finally {
+                // ALWAYS guarantee returning to Inventory table for next SKU, even if editing or submitting failed
+                try {
+                    await ensureOnInventoryPage(page);
+                } catch (resetErr) {
+                    console.log("  > Error during post-SKU inventory reset: " + resetErr.message);
+                }
             }
         }
 

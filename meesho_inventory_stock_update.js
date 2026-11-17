@@ -25,12 +25,10 @@ const UPDATES_FILE = 'inventory_stock_updates.csv';
 // Helper to read accounts
 async function getAccounts() {
     try {
-        const { connectDB } = require('./db');
-        const db = await connectDB();
-        const accounts = await db.collection('accounts').find({ isActive: true }).toArray();
-        return accounts;
+        const { getAccounts } = require('./accounts_helper');
+        return await getAccounts();
     } catch (e) {
-        console.error("Error fetching accounts from DB:", e.message);
+        console.error("Error fetching accounts:", e.message);
         return [];
     }
 }
@@ -317,18 +315,21 @@ async function updateInventoryForAccount(browser, account, updates) {
                     results.push({ sku, status: 'Failed', reason: errMsg });
                 }
 
-                // Reset search for next SKU by clearing search box
-                try {
-                    await searchBox.fill('');
-                    await page.waitForTimeout(500);
-                } catch (e) {
-                    console.log("  > Error resetting search box: " + e.message);
-                }
-
             } catch (e) {
                 console.error(`[${username}] Error processing SKU ${sku}:`, e.message);
                 await logBotError(path.basename(__filename), username, e.message, page, sku);
                 results.push({ sku, status: 'Error', reason: e.message });
+            } finally {
+                // Reset search for next SKU by clearing search box even if previous SKU failed
+                try {
+                    const searchBox = page.getByPlaceholder(/search by/i).first();
+                    if (await searchBox.isVisible({ timeout: 1500 }).catch(() => false)) {
+                        await searchBox.fill('');
+                        await page.waitForTimeout(500);
+                    }
+                } catch (resetErr) {
+                    console.log("  > Error resetting search box: " + resetErr.message);
+                }
             }
         }
 

@@ -137,7 +137,8 @@ async function initializeDB() {
         const db = await connectDB();
         console.log("Connected to MongoDB successfully.");
 
-        // 1. Migrate Accounts (Removed as accounts.csv is no longer used)
+        // Ensure isActive is NOT stored in MongoDB accounts collection (selection is kept locally)
+        await db.collection('accounts').updateMany({ isActive: { $exists: true } }, { $unset: { isActive: "" } });
 
         // 2. Migrate Inventory Price & Stock Updates
         const priceColl = db.collection('inventory_price_updates');
@@ -674,11 +675,11 @@ app.post('/api/profile/update', async (req, res) => {
 
 // --- API ENDPOINTS ---
 
-// Accounts
+// Accounts (Credentials in MongoDB, Selection stored locally)
 app.get('/api/accounts', async (req, res) => {
     try {
-        const db = await connectDB();
-        const accounts = await db.collection('accounts').find({}).toArray();
+        const { getAccounts } = require('./accounts_helper');
+        const accounts = await getAccounts({ all: true });
         res.json(accounts);
     } catch (e) {
         res.status(500).json({ error: "Failed to fetch accounts from DB: " + e.message });
@@ -696,16 +697,64 @@ app.post('/api/accounts', async (req, res) => {
         const accountsColl = db.collection('accounts');
         await accountsColl.deleteMany({});
         if (accounts.length > 0) {
+            // Note: isActive is stored locally in selected_accounts.json, NOT in MongoDB!
             await accountsColl.insertMany(accounts.map(acc => ({
                 username: acc.username.trim(),
                 password: acc.password.trim(),
-                name: acc.name ? acc.name.trim() : '',
-                isActive: acc.isActive !== false
+                name: acc.name ? acc.name.trim() : ''
             })));
         }
 
+        // Clean up any lingering isActive in MongoDB
+        await accountsColl.updateMany({ isActive: { $exists: true } }, { $unset: { isActive: "" } });
+
+        // Update local selection for these accounts
+        const { getLocalSelection, saveLocalSelection } = require('./accounts_helper');
+        const currentSelection = getLocalSelection();
+        accounts.forEach(acc => {
+            if (acc.username) {
+                const u = acc.username.trim();
+                if (acc.isActive !== undefined) {
+                    currentSelection[u] = acc.isActive !== false;
+                } else if (currentSelection[u] === undefined) {
+                    currentSelection[u] = true;
+                }
+            }
+        });
+        saveLocalSelection(currentSelection);
 
         res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Local Account Selection endpoints (stored locally, not in MongoDB)
+app.get('/api/local-account-selection', (req, res) => {
+    try {
+        const { getLocalSelection } = require('./accounts_helper');
+        res.json({ selection: getLocalSelection() });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/local-account-selection', (req, res) => {
+    try {
+        const { selection, username, isSelected } = req.body;
+        const { getLocalSelection, saveLocalSelection } = require('./accounts_helper');
+        let current = getLocalSelection();
+
+        if (selection && typeof selection === 'object') {
+            current = { ...current, ...selection };
+        } else if (username) {
+            current[username] = Boolean(isSelected);
+        } else {
+            return res.status(400).json({ error: 'Invalid selection payload' });
+        }
+
+        saveLocalSelection(current);
+        res.json({ success: true, selection: current });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

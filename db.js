@@ -34,4 +34,9 @@ async function connectDB() {
     return db;
 }
 
-module.exports = { connectDB, MONGODB_URI };
+module.exports = {
+    connectDB,
+    MONGODB_URI,
+    get getAccounts() { return require('./accounts_helper').getAccounts; },
+    get loadAccounts() { return require('./accounts_helper').loadAccounts; }
+};

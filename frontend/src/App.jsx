@@ -102,7 +102,22 @@ function App() {
 
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
-      .then(data => setAccountCount(Array.isArray(data) ? data.filter(a => a.isActive !== false).length : 0))
+      .then(data => {
+        let localSelection = null;
+        try {
+          const raw = localStorage.getItem('selected_accounts');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+              localSelection = parsed;
+            }
+          }
+        } catch (e) {}
+        const count = Array.isArray(data)
+          ? data.filter(a => ((localSelection && localSelection[a.username] !== undefined) ? localSelection[a.username] : (a.isActive !== false))).length
+          : 0;
+        setAccountCount(count);
+      })
       .catch(err => console.error("Error fetching accounts:", err));
 
     fetchErrorsCount();

@@ -27,7 +27,23 @@ function ReturnOTPs({ scripts, onTrigger }) {
   const fetchAccounts = () => {
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
-      .then(data => setAccounts(data))
+      .then(data => {
+        let localSelection = null;
+        try {
+          const raw = localStorage.getItem('selected_accounts');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+              localSelection = parsed;
+            }
+          }
+        } catch (e) {}
+        const merged = Array.isArray(data) ? data.map(a => ({
+          ...a,
+          isActive: (localSelection && localSelection[a.username] !== undefined) ? localSelection[a.username] : (a.isActive !== false)
+        })) : [];
+        setAccounts(merged);
+      })
       .catch(err => console.error("Error fetching accounts:", err));
   };
 
