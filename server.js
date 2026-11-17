@@ -206,22 +206,7 @@ async function initializeDB() {
             }
         }
 
-        // 4. Migrate Errors (One-time migration check)
-        const errorsColl = db.collection('errors');
-        const errorsCount = await errorsColl.countDocuments();
-        if (errorsCount === 0) {
-            const errorsPath = path.join(__dirname, 'errors.json');
-            if (fs.existsSync(errorsPath)) {
-                try {
-                    const errors = JSON.parse(fs.readFileSync(errorsPath, 'utf8'));
-                    if (Array.isArray(errors) && errors.length > 0) {
-                        console.log("Migrating error logs to MongoDB...");
-                        await errorsColl.insertMany(errors);
-                        console.log(`Migrated ${errors.length} error logs to MongoDB.`);
-                    }
-                } catch (e) {}
-            }
-        }
+        // 4. Notifications/errors are stored locally in errors.json (not in MongoDB)
 
         // 5. Migrate Return OTPs (One-time migration check)
         const otpsColl = db.collection('return_otps');
@@ -1660,44 +1645,56 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// Errors
-app.get('/api/errors', async (req, res) => {
+// Errors (stored locally in errors.json, not in MongoDB)
+const getErrorsFilePath = () => path.join(__dirname, 'errors.json');
+
+function readLocalErrors() {
+    const errorsPath = getErrorsFilePath();
+    if (!fs.existsSync(errorsPath)) return [];
     try {
-        const db = await connectDB();
-        const errors = await db.collection('errors').find({}).sort({ timestamp: -1 }).toArray();
-        res.json(errors.map(({ _id, ...rest }) => rest));
+        const parsed = JSON.parse(fs.readFileSync(errorsPath, 'utf8'));
+        if (!Array.isArray(parsed)) return [];
+        return parsed.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    } catch (e) {
+        return [];
+    }
+}
+
+function writeLocalErrors(errors) {
+    fs.writeFileSync(getErrorsFilePath(), JSON.stringify(errors, null, 2), 'utf8');
+}
+
+app.get('/api/errors', (req, res) => {
+    try {
+        res.json(readLocalErrors());
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.delete('/api/errors', async (req, res) => {
+app.delete('/api/errors', (req, res) => {
     try {
-        const db = await connectDB();
-        await db.collection('errors').deleteMany({});
-
+        writeLocalErrors([]);
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-app.delete('/api/errors/:index', async (req, res) => {
+app.delete('/api/errors/:index', (req, res) => {
     try {
         const index = parseInt(req.params.index, 10);
-        const db = await connectDB();
-        const errors = await db.collection('errors').find({}).sort({ timestamp: -1 }).toArray();
+        const errors = readLocalErrors();
         if (index >= 0 && index < errors.length) {
-            const toRemove = errors[index];
-            await db.collection('errors').deleteOne({ _id: toRemove._id });
+            const [toRemove] = errors.splice(index, 1);
+            writeLocalErrors(errors);
 
-            if (toRemove.screenshot) {
+            if (toRemove && toRemove.screenshot) {
                 const screenshotPath = path.join(getErrorScreenshotsPath(), toRemove.screenshot);
                 if (fs.existsSync(screenshotPath)) {
                     fs.unlinkSync(screenshotPath);
                 }
             }
-
         }
         res.json({ success: true });
     } catch (e) {
