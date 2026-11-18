@@ -1665,7 +1665,45 @@ app.get('/api/scripts', (req, res) => {
     }
 });
 
-app.post('/api/run/:scriptName', (req, res) => {
+// Proxy Settings (persisted in MongoDB so Render deployments can route through an Indian proxy without redeploying)
+app.get('/api/proxy-settings', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const doc = await db.collection('settings').findOne({ key: 'proxy' });
+        res.json({
+            server: (doc && doc.server) || process.env.PROXY_SERVER || '',
+            username: (doc && doc.username) || process.env.PROXY_USERNAME || '',
+            password: (doc && doc.password) || process.env.PROXY_PASSWORD || ''
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/proxy-settings', async (req, res) => {
+    try {
+        const { server = '', username = '', password = '' } = req.body || {};
+        const db = await connectDB();
+        await db.collection('settings').updateOne(
+            { key: 'proxy' },
+            {
+                $set: {
+                    key: 'proxy',
+                    server: String(server).trim(),
+                    username: String(username).trim(),
+                    password: String(password).trim(),
+                    updatedAt: new Date()
+                }
+            },
+            { upsert: true }
+        );
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/run/:scriptName', async (req, res) => {
     const { scriptName } = req.params;
     const { account, selectedAccounts } = req.body || {};
 
@@ -1685,6 +1723,18 @@ app.post('/api/run/:scriptName', (req, res) => {
     try {
         const env = Object.assign({}, process.env);
         delete env.NODE_OPTIONS;
+
+        // Inject saved proxy settings from MongoDB if present
+        try {
+            const db = await connectDB();
+            const proxyDoc = await db.collection('settings').findOne({ key: 'proxy' });
+            if (proxyDoc && proxyDoc.server) {
+                env.PROXY_SERVER = proxyDoc.server;
+                if (proxyDoc.username) env.PROXY_USERNAME = proxyDoc.username;
+                if (proxyDoc.password) env.PROXY_PASSWORD = proxyDoc.password;
+            }
+        } catch (e) {}
+
         if (account) {
             env.TARGET_ACCOUNT = String(account).trim();
         } else if (selectedAccounts !== undefined) {

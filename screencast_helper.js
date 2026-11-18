@@ -99,14 +99,13 @@ function wrapPlaywright(chromiumLauncher) {
                 options.args = [];
             }
             
-            // Essential container & Akamai WAF bypass flags for Linux / Docker / Render
+            // Essential container flags for Linux / Docker / Render
             const essentialArgs = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--enable-features=CDPScreenshotNewSurface',
                 '--disable-blink-features=AutomationControlled',
-                '--disable-http2',
                 '--disable-infobars',
                 '--lang=en-US,en'
             ];
