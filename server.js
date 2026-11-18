@@ -1754,9 +1754,18 @@ app.post('/api/stop/:scriptName', (req, res) => {
 
     if (activeProcesses.has(scriptName)) {
         const proc = activeProcesses.get(scriptName);
-        proc.child.kill('SIGTERM');
+        try {
+            proc.child.kill('SIGTERM');
+            setTimeout(() => {
+                try {
+                    if (proc.child.exitCode === null) {
+                        proc.child.kill('SIGKILL');
+                    }
+                } catch (e) {}
+            }, 1500);
+        } catch (e) {}
         activeProcesses.delete(scriptName);
-        io.emit('log', { script: scriptName, type: 'system', message: 'Process killed by user' });
+        io.emit('log', { script: scriptName, type: 'system', message: 'Process stopped by user' });
         io.emit('processStatus', { script: scriptName, status: 'stopped' });
         return res.json({ success: true, message: 'Script stopped' });
     }
@@ -1777,5 +1786,21 @@ app.get('*any', (req, res, next) => {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, async () => {
     console.log(`Backend server running on http://localhost:${PORT}`);
+    // Auto-start virtual X display on Linux if DISPLAY is not already set
+    if (process.platform === 'linux' && !process.env.DISPLAY) {
+        try {
+            const { execSync, spawn } = require('child_process');
+            execSync('which Xvfb');
+            const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac'], {
+                detached: true,
+                stdio: 'ignore'
+            });
+            xvfb.unref();
+            process.env.DISPLAY = ':99';
+            console.log('Virtual X display started via Xvfb on DISPLAY=:99');
+        } catch (e) {
+            console.warn('Xvfb not available on host:', e.message);
+        }
+    }
     await initializeDB();
 });

@@ -7,7 +7,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: HEADLESS
-        value: "true"
+        value: "false"
       - key: PORT
         value: "3001"
       - key: MONGODB_URI
@@ -22,4 +22,3 @@ services:
         sync: false
       - key: SMTP_PASS
         sync: false
-

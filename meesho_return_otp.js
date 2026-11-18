@@ -60,14 +60,9 @@ async function fetchReturnOTPs(browser, account) {
 
     let contextOptions = {
         viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     };
     const context = await browser.newContext(contextOptions);
-
-    await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
         window.chrome = { runtime: {} };
     });
 
@@ -213,6 +208,10 @@ async function runFetcher() {
 
     const BATCH_SIZE = 2; // Process 2 accounts at a time
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+        if (!browser || !browser.isConnected()) {
+            console.log("Browser closed or disconnected. Aborting remaining batches.");
+            break;
+        }
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
         await Promise.all(batch.map(account =>

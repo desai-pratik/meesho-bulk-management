@@ -178,18 +178,11 @@ async function processAccount(browser, account) {
 
     const context = await browser.newContext({
         viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
         acceptDownloads: true // Crucial for downloading labels automatically
     });
 
     // Inject stealth scripts to look like a human
-    await context.addInitScript(() => {
-        // Remove webdriver property
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        // Mock plugins to appear as a regular browser
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        // Mock languages
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
         // Add fake chrome object
         window.chrome = { runtime: {} };
     });

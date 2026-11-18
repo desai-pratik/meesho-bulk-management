@@ -1,30 +1,78 @@
 const Module = require('module');
 const originalRequire = Module.prototype.require;
 
-// Intercept require('playwright') to inject headless mode and screenshot streaming
+let isShuttingDown = false;
+let currentBrowser = null;
+
+function handleShutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[ScreencastHelper] Received ${signal}. Terminating bot process immediately...`);
+    if (currentBrowser) {
+        try {
+            currentBrowser.close().catch(() => {});
+        } catch (e) {}
+    }
+    setTimeout(() => process.exit(0), 100);
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+let stealthChromium = null;
+try {
+    const { chromium } = require('playwright-extra');
+    const stealth = require('puppeteer-extra-plugin-stealth')();
+    chromium.use(stealth);
+    stealthChromium = chromium;
+} catch (e) {
+    console.warn("[ScreencastHelper] Could not initialize playwright-extra stealth plugin:", e.message);
+}
+
+// Intercept require('playwright') to inject stealth mode, headed/headless settings, and screencast streaming
 Module.prototype.require = function (id) {
     if (id === 'playwright') {
         const playwright = originalRequire.apply(this, arguments);
-        wrapPlaywright(playwright);
-        return playwright;
+        const targetChromium = stealthChromium || playwright.chromium;
+        wrapPlaywright(targetChromium);
+        return {
+            ...playwright,
+            chromium: targetChromium
+        };
     }
     return originalRequire.apply(this, arguments);
 };
 
-function wrapPlaywright(playwright) {
-    if (playwright.chromium && !playwright.chromium._isWrapped) {
-        playwright.chromium._isWrapped = true;
-        const originalLaunch = playwright.chromium.launch;
+function wrapPlaywright(chromiumLauncher) {
+    if (chromiumLauncher && !chromiumLauncher._isWrapped) {
+        chromiumLauncher._isWrapped = true;
+        const originalLaunch = chromiumLauncher.launch;
         
-        playwright.chromium.launch = async function (options = {}) {
+        chromiumLauncher.launch = async function (options = {}) {
+            // Ensure Xvfb virtual display is running if on Linux and no DISPLAY is set
+            if (process.platform === 'linux' && !process.env.DISPLAY) {
+                try {
+                    const { execSync, spawn } = require('child_process');
+                    execSync('which Xvfb');
+                    const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac'], {
+                        detached: true,
+                        stdio: 'ignore'
+                    });
+                    xvfb.unref();
+                    process.env.DISPLAY = ':99';
+                    console.log('[ScreencastHelper] Initialized Xvfb virtual display on DISPLAY=:99');
+                } catch (e) {
+                    console.warn('[ScreencastHelper] Xvfb not available, running headless:', e.message);
+                }
+            }
+
             // Determine headless mode:
-            // On Linux containers (Render, Docker) with no DISPLAY or when HEADLESS=true,
-            // we MUST enable headless mode to avoid "Missing X server or $DISPLAY" crash.
+            // Running headed (headless: false) is vital to bypass Akamai WAF detection.
+            // On Linux containers (Render, Docker), headed mode runs smoothly inside the Xvfb display.
             const isHeadless = process.env.HEADLESS === 'true' || (process.platform === 'linux' && !process.env.DISPLAY);
-            
             if (isHeadless) {
                 options.headless = true;
-            } else if (options.headless === undefined) {
+            } else {
                 options.headless = false;
             }
             
@@ -49,31 +97,54 @@ function wrapPlaywright(playwright) {
             }
             
             if (!options.headless) {
-                // When running headed (e.g. Windows desktop), position the window off-screen
+                // When running headed, position the window off-screen so it is invisible to desktop users
                 options.args = options.args.filter(arg => arg !== '--start-maximized');
                 options.args.push('--window-position=-2000,-2000');
                 options.args.push('--window-size=1280,800');
             }
-            
-            const browser = await originalLaunch.call(playwright.chromium, options);
+
+            // Prefer official Google Chrome channel if available for real TLS / JA3 / JA8 fingerprint
+            let browser = null;
+            const originalChannel = options.channel;
+            if (!originalChannel && process.env.USE_CHROME_CHANNEL !== 'false') {
+                try {
+                    options.channel = 'chrome';
+                    browser = await originalLaunch.call(chromiumLauncher, options);
+                } catch (e) {
+                    delete options.channel;
+                }
+            }
+
+            if (!browser) {
+                browser = await originalLaunch.call(chromiumLauncher, options);
+            }
+            currentBrowser = browser;
             
             // Wrap browser context and page creations to inject screencasting
             const originalClose = browser.close;
             browser.close = async function () {
+                isShuttingDown = true;
+                currentBrowser = null;
                 try {
                     await originalClose.apply(browser, arguments);
                 } catch (e) {
-                    console.error("Error closing browser:", e);
+                    console.error("Error closing browser:", e.message);
                 }
-                setTimeout(() => process.exit(0), 500);
+                setTimeout(() => process.exit(0), 200);
             };
 
             const originalNewContext = browser.newContext;
             browser.newContext = async function (contextOptions) {
+                if (isShuttingDown || !browser.isConnected()) {
+                    throw new Error("Target page, context or browser has been closed");
+                }
                 const context = await originalNewContext.call(browser, contextOptions);
                 
                 const originalNewPage = context.newPage;
                 context.newPage = async function () {
+                    if (isShuttingDown || !browser.isConnected()) {
+                        throw new Error("Target page, context or browser has been closed");
+                    }
                     const page = await originalNewPage.apply(context, arguments);
                     setupScreencast(page);
                     return page;
@@ -83,6 +154,9 @@ function wrapPlaywright(playwright) {
 
             const originalNewPage = browser.newPage;
             browser.newPage = async function () {
+                if (isShuttingDown || !browser.isConnected()) {
+                    throw new Error("Target page, context or browser has been closed");
+                }
                 const page = await originalNewPage.apply(browser, arguments);
                 setupScreencast(page);
                 return page;
@@ -126,12 +200,10 @@ async function setupScreencast(page) {
             }
         });
     } catch (e) {
-        console.error("Failed to start CDP screencast, falling back to screenshot polling:", e.message);
-        
         // Fallback: 1000ms screenshot polling in case CDP fails
         let isCapturing = false;
         const interval = setInterval(async () => {
-            if (page.isClosed()) {
+            if (page.isClosed() || isShuttingDown) {
                 clearInterval(interval);
                 return;
             }

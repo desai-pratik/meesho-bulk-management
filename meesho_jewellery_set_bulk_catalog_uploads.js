@@ -297,26 +297,21 @@ async function processAccount(browser, account, uploadFiles) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
-    let contextOptions = {
-        viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    };
-    const context = await browser.newContext(contextOptions);
-
-    // Inject stealth scripts to look like a human
-    await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        window.chrome = { runtime: {} };
-    });
-
-    const page = await context.newPage();
-
     const fileResults = [];
     let globalError = null;
+    let context = null;
 
     try {
+        if (!browser || !browser.isConnected()) {
+            throw new Error("Target page, context or browser has been closed");
+        }
+
+        let contextOptions = {
+            viewport: null,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        };
+        context = await browser.newContext(contextOptions);
+        const page = await context.newPage();
         console.log(`[${username}] Navigating to Meesho...`);
         await page.goto(LOGIN_URL, { timeout: 30000 });
 
@@ -530,15 +525,27 @@ async function runBot() {
     // Batch Processing
     const BATCH_SIZE = 1; // Keep at 2 for stability
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+        if (!browser || !browser.isConnected()) {
+            console.log("Browser closed or disconnected. Aborting remaining batches.");
+            break;
+        }
+
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
 
         const batchResults = await Promise.all(batch.map(account => asyncLocalStorage.run(account.username, () => processAccount(browser, account, uploadFiles))));
         results.push(...batchResults);
 
+        if (i + BATCH_SIZE < accounts.length) {
+            if (!browser || !browser.isConnected()) {
+                console.log("Browser closed or disconnected. Aborting run.");
+                break;
+            }
+            if (!browser || !browser.isConnected()) break;
         console.log("Batch complete. Waiting 8-12 seconds to prevent rate-limiting...");
-        const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
-        await new Promise(r => setTimeout(r, delay));
+            const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
+            await new Promise(r => setTimeout(r, delay));
+        }
     }
 
     console.log("\nAll accounts processed.");

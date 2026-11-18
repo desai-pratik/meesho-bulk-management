@@ -299,17 +299,10 @@ async function processAccount(browser, account, uploadFiles) {
 
     const context = await browser.newContext({
         viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     });
 
     // Inject stealth scripts to look like a human
-    await context.addInitScript(() => {
-        // Remove webdriver property
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        // Mock plugins to appear as a regular browser
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        // Mock languages
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
         // Add fake chrome object
         window.chrome = { runtime: {} };
     });
@@ -541,6 +534,10 @@ async function runBot() {
     // Batch Processing
     const BATCH_SIZE = 1; // Keep at 2 for stability
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+        if (!browser || !browser.isConnected()) {
+            console.log("Browser closed or disconnected. Aborting remaining batches.");
+            break;
+        }
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
 
