@@ -1633,10 +1633,17 @@ app.get('/api/stats', async (req, res) => {
     try {
         const db = await connectDB();
         const stats = await db.collection('stats').find({}).toArray();
-        res.json(stats.map(s => ({
-            account: s.account,
-            pendingOrders: s.pendingOrders
-        })));
+        const statsMap = new Map();
+        stats.forEach(s => statsMap.set(s.account, s.pendingOrders));
+
+        const accounts = await db.collection('accounts').find({}).toArray();
+        const result = accounts.map(acc => ({
+            account: acc.username,
+            name: acc.name,
+            pendingOrders: statsMap.has(acc.username) ? statsMap.get(acc.username) : 0
+        }));
+
+        res.json(result);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -1676,10 +1683,8 @@ app.get('/api/scripts', (req, res) => {
             let name = s.replace('meesho_', '').replace('.js', '').replace(/_/g, ' ');
             name = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-            const isLocalRunning = activeProcesses.has(s);
-            const isRemoteRunning = remoteRunningProcesses.has(s);
-            const isRunning = isLocalRunning || isRemoteRunning;
-            const proc = isLocalRunning ? activeProcesses.get(s) : (isRemoteRunning ? remoteRunningProcesses.get(s) : null);
+            const isRunning = activeProcesses.has(s);
+            const proc = isRunning ? activeProcesses.get(s) : null;
 
             return {
                 filename: s,

@@ -140,15 +140,6 @@ async function runFetcher() {
     }
     console.log(`Found ${accounts.length} accounts to fetch stats for.`);
 
-    // Clear old stats before starting the sync
-    try {
-        const db = await connectDB();
-        await db.collection('stats').deleteMany({});
-        console.log("Cleared old pending orders stats in MongoDB.");
-    } catch (e) {
-        console.error("Failed to clear old stats in MongoDB:", e.message);
-    }
-
     const browser = await chromium.launch({
         headless: process.env.HEADLESS === 'true' ? true : false,
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
