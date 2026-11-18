@@ -59,7 +59,6 @@ function App() {
   const [fileCount, setFileCount] = useState(0);
   const [accountCount, setAccountCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
-  const [localChromeConnected, setLocalChromeConnected] = useState(false);
 
   const handleLoginSuccess = (newToken, newUser) => {
     localStorage.setItem('token', newToken);
@@ -171,11 +170,6 @@ function App() {
       updateAccountCount();
     };
 
-    const handleWorkerStatus = (data) => {
-      setLocalChromeConnected(Boolean(data && data.connected));
-    };
-
-    socket.on('workerStatus', handleWorkerStatus);
     socket.on('notification', handleSocketNotification);
     window.addEventListener('notifications-updated', handleNotificationsChanged);
     window.addEventListener('selected-accounts-updated', handleAccountsChanged);
@@ -185,7 +179,6 @@ function App() {
     return () => {
       socket.off('log');
       socket.off('processStatus');
-      socket.off('workerStatus', handleWorkerStatus);
       socket.off('notification', handleSocketNotification);
       window.removeEventListener('notifications-updated', handleNotificationsChanged);
       window.removeEventListener('selected-accounts-updated', handleAccountsChanged);
@@ -372,24 +365,6 @@ function App() {
             <h2 className="mobile-only-title">Sync Hub</h2>
           </div>
           <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <div
-              title={localChromeConnected ? 'Your Windows PC Local Chrome is connected and will run Meesho bots using your Indian IP' : 'Run start_local_chrome.bat (or npm start) on your PC to use your local Chrome'}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 10px',
-                borderRadius: '999px',
-                fontSize: '0.78rem',
-                fontWeight: 500,
-                background: localChromeConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.12)',
-                border: localChromeConnected ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(148, 163, 184, 0.25)',
-                color: localChromeConnected ? '#10b981' : '#94a3b8'
-              }}
-            >
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: localChromeConnected ? '#10b981' : '#94a3b8' }} />
-              {localChromeConnected ? 'Local Chrome Connected' : 'Cloud Browser Mode'}
-            </div>
             <NavLink to="/profile" style={{ textDecoration: 'none', color: 'inherit' }}>
               <div className="user-profile">
                 <UserCircle size={20} />

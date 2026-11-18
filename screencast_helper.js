@@ -101,16 +101,6 @@ function wrapPlaywright(chromiumLauncher) {
             } else if (Array.isArray(options.ignoreDefaultArgs) && !options.ignoreDefaultArgs.includes('--enable-automation')) {
                 options.ignoreDefaultArgs.push('--enable-automation');
             }
-
-            // Support optional proxy configuration via environment variables
-            if (process.env.PROXY_SERVER && !options.proxy) {
-                options.proxy = {
-                    server: process.env.PROXY_SERVER.trim()
-                };
-                if (process.env.PROXY_USERNAME) options.proxy.username = process.env.PROXY_USERNAME.trim();
-                if (process.env.PROXY_PASSWORD) options.proxy.password = process.env.PROXY_PASSWORD.trim();
-                console.log(`[ScreencastHelper] Routing browser traffic via proxy: ${options.proxy.server}`);
-            }
             
             if (!options.headless) {
                 options.args = options.args.filter(arg => arg !== '--start-maximized');

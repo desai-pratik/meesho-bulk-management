@@ -9,10 +9,6 @@ function AccountsManager({ scripts, onTrigger }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncStatus, setSyncStatus] = useState('');
-  const [proxyServer, setProxyServer] = useState('');
-  const [proxyUsername, setProxyUsername] = useState('');
-  const [proxyPassword, setProxyPassword] = useState('');
-  const [proxySavedMsg, setProxySavedMsg] = useState('');
 
   const syncLocalSelectionToServer = (selectionMap) => {
     try {
@@ -25,17 +21,6 @@ function AccountsManager({ scripts, onTrigger }) {
   };
 
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/proxy-settings`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && !data.error) {
-          setProxyServer(data.server || '');
-          setProxyUsername(data.username || '');
-          setProxyPassword(data.password || '');
-        }
-      })
-      .catch(() => {});
-
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
       .then(async data => {
@@ -165,93 +150,10 @@ function AccountsManager({ scripts, onTrigger }) {
     }
   };
 
-  const saveProxySettings = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/proxy-settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          server: proxyServer.trim(),
-          username: proxyUsername.trim(),
-          password: proxyPassword.trim()
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setProxySavedMsg('Proxy saved!');
-        setTimeout(() => setProxySavedMsg(''), 3000);
-      }
-    } catch (e) {
-      alert('Failed to save proxy settings');
-    }
-  };
-
   if (loading) return <div className="glass-panel">Loading accounts...</div>;
 
   return (
     <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 85px)', overflow: 'hidden', paddingRight: '1rem' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', flexShrink: 0 }}>
-        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-          <strong style={{ color: '#e2e8f0' }}>Indian Proxy (Required on Render / US Cloud Hosts):</strong> Meesho Akamai WAF blocks non-Indian datacenter IPs.
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            className="input-field"
-            autoComplete="off"
-            name="meesho_proxy_server_url"
-            placeholder="http://indian-proxy-ip:port (or leave blank)"
-            value={proxyServer}
-            onChange={(e) => setProxyServer(e.target.value)}
-            style={{ minWidth: '240px', padding: '6px 10px', fontSize: '0.85rem' }}
-          />
-          <input
-            type="text"
-            className="input-field"
-            autoComplete="off"
-            name="meesho_proxy_auth_user"
-            placeholder="Proxy Username (optional)"
-            value={proxyUsername}
-            onChange={(e) => setProxyUsername(e.target.value)}
-            style={{ width: '165px', padding: '6px 10px', fontSize: '0.85rem' }}
-          />
-          <input
-            type="password"
-            className="input-field"
-            autoComplete="new-password"
-            name="meesho_proxy_auth_pass"
-            placeholder="Proxy Password (optional)"
-            value={proxyPassword}
-            onChange={(e) => setProxyPassword(e.target.value)}
-            style={{ width: '165px', padding: '6px 10px', fontSize: '0.85rem' }}
-          />
-          <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={saveProxySettings}>
-            <Save size={14} /> Save Proxy
-          </button>
-          {proxyServer && (
-            <button
-              className="btn btn-danger"
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }}
-              onClick={async () => {
-                setProxyServer('');
-                setProxyUsername('');
-                setProxyPassword('');
-                await fetch(`${BACKEND_URL}/api/proxy-settings`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ server: '', username: '', password: '' })
-                });
-                setProxySavedMsg('Proxy cleared!');
-                setTimeout(() => setProxySavedMsg(''), 3000);
-              }}
-            >
-              Clear
-            </button>
-          )}
-          {proxySavedMsg && <span style={{ color: 'var(--success)', fontSize: '0.82rem' }}>{proxySavedMsg}</span>}
-        </div>
-      </div>
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexShrink: 0 }}>
         <div>
           <h2 style={{ fontSize: '1.4rem', margin: 0 }}>Manage Meesho Accounts</h2>

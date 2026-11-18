@@ -38,54 +38,9 @@ const io = new Server(server, {
 
 // Map of currently running processes
 const activeProcesses = new Map();
-// Remote processes running on connected Local Chrome Worker (Windows PC in India)
-const remoteRunningProcesses = new Map();
-let localChromeWorkerSocket = null;
 
 io.on('connection', (socket) => {
-    const role = socket.handshake && socket.handshake.auth && socket.handshake.auth.role;
-    if (role === 'local-chrome-worker') {
-        console.log(`[LocalChromeWorker] Connected from local PC (${socket.id})`);
-        localChromeWorkerSocket = socket;
-        io.emit('workerStatus', { connected: true });
-
-        socket.on('worker:screencast', (data) => {
-            io.emit('screencast', data);
-        });
-        socket.on('worker:log', (data) => {
-            io.emit('log', data);
-        });
-        socket.on('worker:notification', (data) => {
-            io.emit('notification', data);
-        });
-        socket.on('worker:processStatus', (data) => {
-            if (data && data.script) {
-                if (data.status === 'running') {
-                    remoteRunningProcesses.set(data.script, { startTime: data.startTime || Date.now() });
-                } else {
-                    remoteRunningProcesses.delete(data.script);
-                }
-            }
-            io.emit('processStatus', data);
-        });
-
-        socket.on('disconnect', () => {
-            if (localChromeWorkerSocket === socket) {
-                console.log('[LocalChromeWorker] Disconnected');
-                localChromeWorkerSocket = null;
-                for (const [scriptName] of remoteRunningProcesses) {
-                    io.emit('processStatus', { script: scriptName, status: 'stopped' });
-                }
-                remoteRunningProcesses.clear();
-                io.emit('workerStatus', { connected: false });
-            }
-        });
-    } else {
-        // Regular browser UI client: tell it immediately whether Local Chrome Worker is connected
-        socket.emit('workerStatus', {
-            connected: Boolean(localChromeWorkerSocket && localChromeWorkerSocket.connected)
-        });
-    }
+    // Client connected
 });
 
 // Helpers for file paths
@@ -1740,125 +1695,6 @@ app.get('/api/scripts', (req, res) => {
     }
 });
 
-// Proxy Settings (persisted in MongoDB so Render deployments can route through an Indian proxy without redeploying)
-app.get('/api/proxy-settings', async (req, res) => {
-    try {
-        const db = await connectDB();
-        const doc = await db.collection('settings').findOne({ key: 'proxy' });
-        res.json({
-            server: (doc && doc.server) || process.env.PROXY_SERVER || '',
-            username: (doc && doc.username) || process.env.PROXY_USERNAME || '',
-            password: (doc && doc.password) || process.env.PROXY_PASSWORD || ''
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.post('/api/proxy-settings', async (req, res) => {
-    try {
-        const { server = '', username = '', password = '' } = req.body || {};
-        const db = await connectDB();
-        await db.collection('settings').updateOne(
-            { key: 'proxy' },
-            {
-                $set: {
-                    key: 'proxy',
-                    server: String(server).trim(),
-                    username: String(username).trim(),
-                    password: String(password).trim(),
-                    updatedAt: new Date()
-                }
-            },
-            { upsert: true }
-        );
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Helper to spawn a bot script locally and optionally forward events to cloudSocket
-async function spawnLocalBotScript(scriptName, { account, selectedAccounts } = {}, cloudSocket = null) {
-    const env = Object.assign({}, process.env);
-    delete env.NODE_OPTIONS;
-
-    try {
-        const db = await connectDB();
-        const proxyDoc = await db.collection('settings').findOne({ key: 'proxy' });
-        if (proxyDoc && proxyDoc.server) {
-            env.PROXY_SERVER = proxyDoc.server;
-            if (proxyDoc.username) env.PROXY_USERNAME = proxyDoc.username;
-            if (proxyDoc.password) env.PROXY_PASSWORD = proxyDoc.password;
-        }
-    } catch (e) { }
-
-    if (account) {
-        env.TARGET_ACCOUNT = String(account).trim();
-    } else if (selectedAccounts !== undefined) {
-        if (Array.isArray(selectedAccounts)) {
-            env.TARGET_ACCOUNT = selectedAccounts.length > 0
-                ? selectedAccounts.map(a => String(a).trim()).filter(Boolean).join(',')
-                : '__NO_ACCOUNTS_SELECTED__';
-        } else if (typeof selectedAccounts === 'string' && selectedAccounts.trim()) {
-            env.TARGET_ACCOUNT = selectedAccounts.trim();
-        }
-    }
-
-    const startTime = Date.now();
-    const child = spawn(process.execPath, ['-r', './screencast_helper.js', scriptName], {
-        cwd: __dirname,
-        env,
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-    });
-    activeProcesses.set(scriptName, { child, startTime });
-
-    const emitBoth = (eventName, payload) => {
-        io.emit(eventName, payload);
-        if (cloudSocket && cloudSocket.connected) {
-            cloudSocket.emit(`worker:${eventName}`, payload);
-        }
-    };
-
-    child.on('message', (message) => {
-        if (message && message.type === 'screencast') {
-            emitBoth('screencast', {
-                script: scriptName,
-                image: message.image,
-                url: message.url
-            });
-        }
-        if (message && message.type === 'notification') {
-            emitBoth('notification', message.data);
-        }
-    });
-
-    child.stdout.on('data', (data) => {
-        const msg = data.toString();
-        console.log(`[${scriptName}] ${msg.trim()}`);
-        emitBoth('log', { script: scriptName, type: 'info', message: msg });
-    });
-
-    child.stderr.on('data', (data) => {
-        const msg = data.toString();
-        console.error(`[${scriptName} ERROR] ${msg.trim()}`);
-        emitBoth('log', { script: scriptName, type: 'error', message: msg });
-    });
-
-    child.on('close', (code) => {
-        console.log(`[${scriptName}] Exited with code ${code}`);
-        emitBoth('log', { script: scriptName, type: 'system', message: `Process exited with code ${code}` });
-        activeProcesses.delete(scriptName);
-        emitBoth('processStatus', { script: scriptName, status: 'stopped' });
-    });
-
-    emitBoth('processStatus', {
-        script: scriptName,
-        status: 'running',
-        startTime
-    });
-}
-
 app.post('/api/run/:scriptName', async (req, res) => {
     const { scriptName } = req.params;
     const { account, selectedAccounts } = req.body || {};
@@ -1874,7 +1710,7 @@ app.post('/api/run/:scriptName', async (req, res) => {
         return res.status(404).json({ error: 'Script not found' });
     }
 
-    if (activeProcesses.has(scriptName) || remoteRunningProcesses.has(scriptName)) {
+    if (activeProcesses.has(scriptName)) {
         return res.status(400).json({ error: 'Script is already running' });
     }
 
@@ -1895,36 +1731,6 @@ app.post('/api/run/:scriptName', async (req, res) => {
             } else if (typeof selectedAccounts === 'string' && selectedAccounts.trim()) {
                 targetAccounts = selectedAccounts.split(',').map(a => a.trim()).filter(Boolean);
             }
-
-            const singleCatalogImages = [];
-            const singleDir = getSingleCatalogImagesPath();
-            if (fs.existsSync(singleDir)) {
-                for (const f of fs.readdirSync(singleDir)) {
-                    const full = path.join(singleDir, f);
-                    if (fs.statSync(full).isFile()) {
-                        singleCatalogImages.push({
-                            name: f,
-                            base64: fs.readFileSync(full).toString('base64')
-                        });
-                    }
-                }
-            }
-
-            const startTime = Date.now();
-            remoteRunningProcesses.set(scriptName, { startTime });
-            io.emit('log', {
-                script: scriptName,
-                type: 'system',
-                message: '[LocalChromeBridge] Delegating bot execution to your Local Chrome on Windows (Indian IP)...'
-            });
-            localChromeWorkerSocket.emit('cloud:runScript', {
-                scriptName,
-                account,
-                selectedAccounts,
-                uploadedFiles,
-                singleCatalogImages
-            });
-            return res.json({ success: true, message: 'Script started on Local Chrome' });
         }
 
         if (targetAccounts !== null) {
@@ -2012,14 +1818,6 @@ app.post('/api/run/:scriptName', async (req, res) => {
 app.post('/api/stop/:scriptName', (req, res) => {
     const { scriptName } = req.params;
 
-    if (remoteRunningProcesses.has(scriptName) && localChromeWorkerSocket && localChromeWorkerSocket.connected) {
-        localChromeWorkerSocket.emit('cloud:stopScript', { scriptName });
-        remoteRunningProcesses.delete(scriptName);
-        io.emit('log', { script: scriptName, type: 'system', message: 'Process stopped by user (Local Chrome)' });
-        io.emit('processStatus', { script: scriptName, status: 'stopped' });
-        return res.json({ success: true, message: 'Script stopped on Local Chrome' });
-    }
-
     if (activeProcesses.has(scriptName)) {
         const proc = activeProcesses.get(scriptName);
         try {
@@ -2074,76 +1872,4 @@ server.listen(PORT, '0.0.0.0', async () => {
         }
     }
     await initializeDB();
-
-    // When running locally on Windows/macOS, automatically connect as a Local Chrome Worker to the live Render URL
-    if (process.platform !== 'linux' && process.env.DISABLE_CLOUD_BRIDGE !== 'true') {
-        try {
-            let ioClient;
-            try {
-                ioClient = require('socket.io-client').io;
-            } catch (e) {
-                ioClient = require('./frontend/node_modules/socket.io-client').io;
-            }
-            const cloudUrl = process.env.RENDER_CLOUD_URL || 'https://meesho-bulk-management-1.onrender.com';
-            const cloudSocket = ioClient(cloudUrl, {
-                auth: { role: 'local-chrome-worker' },
-                reconnection: true,
-                reconnectionDelay: 3000
-            });
-
-            cloudSocket.on('connect', () => {
-                console.log(`[LocalChromeBridge] Connected to live cloud server (${cloudUrl})! Bots triggered on the live URL will now run in your Local Chrome.`);
-            });
-
-            cloudSocket.on('cloud:runScript', async (payload = {}) => {
-                const { scriptName, account, selectedAccounts, uploadedFiles, singleCatalogImages } = payload;
-                if (!scriptName || activeProcesses.has(scriptName)) return;
-
-                console.log(`[LocalChromeBridge] Received run command from cloud for ${scriptName}`);
-
-                // Sync uploaded .xlsx files from cloud
-                if (Array.isArray(uploadedFiles)) {
-                    const uploadsDir = getUploadsPath();
-                    for (const existing of fs.readdirSync(uploadsDir)) {
-                        try { fs.unlinkSync(path.join(uploadsDir, existing)); } catch (e) { }
-                    }
-                    for (const fileObj of uploadedFiles) {
-                        if (fileObj && fileObj.name && fileObj.base64) {
-                            fs.writeFileSync(path.join(uploadsDir, path.basename(fileObj.name)), Buffer.from(fileObj.base64, 'base64'));
-                        }
-                    }
-                }
-
-                // Sync single catalog images from cloud
-                if (Array.isArray(singleCatalogImages) && singleCatalogImages.length > 0) {
-                    const singleDir = getSingleCatalogImagesPath();
-                    for (const imgObj of singleCatalogImages) {
-                        if (imgObj && imgObj.name && imgObj.base64) {
-                            fs.writeFileSync(path.join(singleDir, path.basename(imgObj.name)), Buffer.from(imgObj.base64, 'base64'));
-                        }
-                    }
-                }
-
-                await spawnLocalBotScript(scriptName, { account, selectedAccounts }, cloudSocket);
-            });
-
-            cloudSocket.on('cloud:stopScript', ({ scriptName } = {}) => {
-                if (scriptName && activeProcesses.has(scriptName)) {
-                    console.log(`[LocalChromeBridge] Stopping ${scriptName} from cloud request`);
-                    const proc = activeProcesses.get(scriptName);
-                    try {
-                        proc.child.kill('SIGTERM');
-                        setTimeout(() => {
-                            try {
-                                if (proc.child.exitCode === null) proc.child.kill('SIGKILL');
-                            } catch (e) { }
-                        }, 1500);
-                    } catch (e) { }
-                    activeProcesses.delete(scriptName);
-                }
-            });
-        } catch (e) {
-            console.warn('[LocalChromeBridge] Could not initialize cloud worker bridge:', e.message);
-        }
-    }
 });
