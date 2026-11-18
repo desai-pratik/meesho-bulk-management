@@ -82,11 +82,20 @@ function App() {
     return () => window.removeEventListener('auth-error', handleAuthError);
   }, []);
 
-  const fetchErrorsCount = () => {
-    fetch(`${BACKEND_URL}/api/errors`)
-      .then(res => res.json())
-      .then(data => setErrorCount(Array.isArray(data) ? data.length : 0))
-      .catch(err => console.error("Error fetching notifications:", err));
+  const updateNotificationsCount = () => {
+    try {
+      const saved = localStorage.getItem('meesho_notifications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setErrorCount(parsed.length);
+          return;
+        }
+      }
+      setErrorCount(0);
+    } catch (e) {
+      setErrorCount(0);
+    }
   };
 
   useEffect(() => {
@@ -124,7 +133,7 @@ function App() {
       })
       .catch(err => console.error("Error fetching accounts:", err));
 
-    fetchErrorsCount();
+    updateNotificationsCount();
 
     // Listen for logs
     socket.on('log', (data) => {
@@ -159,9 +168,33 @@ function App() {
       ));
     });
 
+    // Listen for real-time notifications
+    const handleSocketNotification = (notif) => {
+      if (!notif || typeof notif !== 'object') return;
+      try {
+        const saved = localStorage.getItem('meesho_notifications');
+        const parsed = saved ? JSON.parse(saved) : [];
+        const updated = [notif, ...parsed.filter(n => n.id !== notif.id)].slice(0, 500);
+        localStorage.setItem('meesho_notifications', JSON.stringify(updated));
+        setErrorCount(updated.length);
+        window.dispatchEvent(new Event('notifications-updated'));
+      } catch (e) { }
+    };
+
+    const handleNotificationsChanged = () => {
+      updateNotificationsCount();
+    };
+
+    socket.on('notification', handleSocketNotification);
+    window.addEventListener('notifications-updated', handleNotificationsChanged);
+    window.addEventListener('storage', handleNotificationsChanged);
+
     return () => {
       socket.off('log');
       socket.off('processStatus');
+      socket.off('notification', handleSocketNotification);
+      window.removeEventListener('notifications-updated', handleNotificationsChanged);
+      window.removeEventListener('storage', handleNotificationsChanged);
     };
   }, [token]);
 
@@ -332,7 +365,7 @@ function App() {
             } />
 
             <Route path="/notifications" element={
-              <Notifications />
+              <Notifications socket={socket} />
             } />
           </Routes>
         </main>

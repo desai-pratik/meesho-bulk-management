@@ -1,15 +1,33 @@
 import { useState, useEffect } from 'react';
-import { Trash2, AlertTriangle, ExternalLink, RefreshCw, Search, CheckCircle } from 'lucide-react';
+import { Trash2, AlertTriangle, ExternalLink, Search, CheckCircle } from 'lucide-react';
 import { BACKEND_URL } from '../config';
 
-function Notifications() {
-  const [errors, setErrors] = useState([]);
-  const [loading, setLoading] = useState(true);
+const LOCAL_STORAGE_KEY = 'meesho_notifications';
+
+function Notifications({ socket }) {
+  const [errors, setErrors] = useState(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) { }
+    return [];
+  });
   const [selectedImage, setSelectedImage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'error', 'success'
+
+  const totalErrorsCount = errors.filter(e => e.type !== 'success').length;
+  const totalSuccessCount = errors.filter(e => e.type === 'success').length;
 
   const filteredErrors = errors
-    .map((err, idx) => ({ ...err, originalIndex: idx }))
+    .filter(err => {
+      if (activeTab === 'error') return err.type !== 'success';
+      if (activeTab === 'success') return err.type === 'success';
+      return true;
+    })
     .filter(err => {
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
@@ -23,88 +41,161 @@ function Notifications() {
       return botMatch || accountMatch || skuMatch || fileMatch || messageMatch || dateMatch;
     });
 
-  const fetchErrors = () => {
-    fetch(`${BACKEND_URL}/api/errors`)
-      .then(res => res.json())
-      .then(data => {
-        setErrors(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Error fetching notifications:", err);
-        setLoading(false);
-      });
+  const saveToLocal = (newErrors) => {
+    setErrors(newErrors);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newErrors));
+      window.dispatchEvent(new Event('notifications-updated'));
+    } catch (e) {
+      console.error("Failed to save notifications to localStorage:", e);
+    }
   };
 
   useEffect(() => {
-    fetchErrors();
+    // Listen to real-time socket events for live incoming notifications
+    if (socket) {
+      const handleNewNotification = (notif) => {
+        if (!notif || typeof notif !== 'object') return;
+        setErrors(prev => {
+          const updated = [notif, ...prev.filter(n => n.id !== notif.id)].slice(0, 500);
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+            window.dispatchEvent(new Event('notifications-updated'));
+          } catch (e) { }
+          return updated;
+        });
+      };
+
+      socket.on('notification', handleNewNotification);
+
+      return () => {
+        socket.off('notification', handleNewNotification);
+      };
+    }
+  }, [socket]);
+
+  // Sync with localStorage if updated in another tab or component
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) setErrors(parsed);
+        } else {
+          setErrors([]);
+        }
+      } catch (e) { }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('notifications-updated', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('notifications-updated', handleStorageChange);
+    };
   }, []);
 
-  const clearAll = async () => {
-    if (!window.confirm("Are you sure you want to clear all notifications?")) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/errors`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) setErrors([]);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to clear notifications");
-    }
+  const clearAll = () => {
+    if (!window.confirm("Are you sure you want to clear all notifications from local storage?")) return;
+    saveToLocal([]);
   };
 
-  const deleteSingleError = async (index) => {
-    if (!window.confirm("Are you sure you want to delete this notification?")) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/errors/${index}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        setErrors(prev => prev.filter((_, i) => i !== index));
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Failed to delete notification");
-    }
+  const deleteSingleError = (err, originalIdx) => {
+    const updated = errors.filter((e, idx) => (err.id ? e.id !== err.id : idx !== originalIdx));
+    saveToLocal(updated);
   };
-
-  if (loading) return <div className="glass-panel">Loading notifications...</div>;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          Notifications
-          {errors.length > 0 && (
-            <span style={{ 
-              background: errors.some(e => e.type !== 'success') ? 'var(--danger)' : 'var(--success)', 
-              color: 'white', 
-              padding: '2px 8px', 
-              borderRadius: '12px', 
-              fontSize: '0.9rem' 
-            }}>
-              {errors.length}
-            </span>
-          )}
-        </h2>
-        <div style={{ display: 'flex', alignItems: "center", gap: "20px" }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+            Notifications
+            {errors.length > 0 && (
+              <span style={{
+                background: totalErrorsCount > 0 ? 'var(--danger)' : 'var(--success)',
+                color: 'white',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontSize: '0.9rem'
+              }}>
+                {errors.length}
+              </span>
+            )}
+          </h2>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Stored in browser local storage
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: "center", gap: "12px", flexWrap: 'wrap' }}>
+          {/* Tab Filter */}
+          <div style={{ display: 'flex', background: 'var(--bg-dark)', borderRadius: '6px', padding: '3px', border: '1px solid var(--border-color)' }}>
+            <button
+              onClick={() => setActiveTab('all')}
+              style={{
+                background: activeTab === 'all' ? 'var(--primary)' : 'transparent',
+                color: activeTab === 'all' ? 'white' : 'var(--text-muted)',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              All ({errors.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('error')}
+              style={{
+                background: activeTab === 'error' ? 'var(--danger)' : 'transparent',
+                color: activeTab === 'error' ? 'white' : 'var(--text-muted)',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              Errors ({totalErrorsCount})
+            </button>
+            <button
+              onClick={() => setActiveTab('success')}
+              style={{
+                background: activeTab === 'success' ? 'var(--success)' : 'transparent',
+                color: activeTab === 'success' ? 'white' : 'var(--text-muted)',
+                border: 'none',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              Success ({totalSuccessCount})
+            </button>
+          </div>
+
           {errors.length > 0 && (
             <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-                <Search size={18} />
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                <Search size={16} />
               </span>
               <input
                 type="text"
                 className="input-field"
-                placeholder="Search by bot, account, SKU, file, message..."
+                placeholder="Search bot, account, SKU, file..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ paddingLeft: '2.75rem', paddingRight: searchQuery ? '2.5rem' : '1rem' }}
+                style={{ paddingLeft: '2.5rem', paddingRight: searchQuery ? '2.5rem' : '1rem', width: '220px' }}
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
                   style={{
                     position: 'absolute',
-                    right: '14px',
+                    right: '12px',
                     top: '50%',
                     transform: 'translateY(-50%)',
                     background: 'transparent',
@@ -112,10 +203,6 @@ function Notifications() {
                     color: 'var(--text-muted)',
                     cursor: 'pointer',
                     fontSize: '1.2rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 0,
                     lineHeight: 1
                   }}
                   title="Clear search"
@@ -125,6 +212,7 @@ function Notifications() {
               )}
             </div>
           )}
+
           {errors.length > 0 && (
             <button className="btn btn-danger" onClick={clearAll} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Trash2 size={16} /> Clear All
@@ -133,28 +221,26 @@ function Notifications() {
         </div>
       </div>
 
-
-
       {errors.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
           <CheckCircle size={48} style={{ margin: '0 auto 1rem', opacity: 0.5, color: 'var(--success)' }} />
-          <h3>No notifications found!</h3>
-          <p>Your bots are running smoothly.</p>
+          <h3>No notifications in local storage</h3>
+          <p>Bot notifications will appear here live when bots run.</p>
         </div>
       ) : filteredErrors.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
           <Search size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
           <h3>No matching notifications found</h3>
-          <p>Try refining your search query.</p>
+          <p>Try switching tabs or refining your search query.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {filteredErrors.map((err) => {
+          {filteredErrors.map((err, idx) => {
             const isSuccess = err.type === 'success';
             const borderCol = isSuccess ? 'var(--success)' : 'var(--danger)';
             const msgBg = isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,50,50,0.1)';
             return (
-              <div key={err.originalIndex} className="glass-panel" style={{ borderLeft: `4px solid ${borderCol}`, display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+              <div key={err.id || idx} className="glass-panel" style={{ borderLeft: `4px solid ${borderCol}`, display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                     <span style={{ fontWeight: '600', color: 'var(--primary)' }}>{err.bot}</span>
@@ -163,7 +249,7 @@ function Notifications() {
                         {new Date(err.timestamp).toLocaleString()}
                       </span>
                       <button
-                        onClick={() => deleteSingleError(err.originalIndex)}
+                        onClick={() => deleteSingleError(err, idx)}
                         style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '0', display: 'flex' }}
                         title="Delete this notification"
                       >
@@ -186,15 +272,16 @@ function Notifications() {
                       </span>
                     )}
                   </div>
-                  <p style={{ 
-                    color: 'var(--text-color)', 
-                    background: msgBg, 
-                    padding: '10px', 
-                    borderRadius: '6px', 
+                  <p style={{
+                    color: 'var(--text-color)',
+                    background: msgBg,
+                    padding: '10px',
+                    borderRadius: '6px',
                     fontSize: '0.95rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    margin: 0
                   }}>
                     {isSuccess ? (
                       <CheckCircle size={16} style={{ color: 'var(--success)', flexShrink: 0 }} />
@@ -207,7 +294,7 @@ function Notifications() {
 
                 {err.screenshot && (
                   <div
-                    style={{ width: '150px', height: '100px', cursor: 'pointer', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative' }}
+                    style={{ width: '150px', height: '100px', cursor: 'pointer', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', position: 'relative', flexShrink: 0 }}
                     onClick={() => setSelectedImage(`${BACKEND_URL}/error_screenshots/${err.screenshot}`)}
                   >
                     <img

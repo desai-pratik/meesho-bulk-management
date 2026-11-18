@@ -1,22 +1,34 @@
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 
-const ERRORS_FILE = path.join(__dirname, 'errors.json');
-
-function appendLocalLog(logEntry) {
-    let logs = [];
-    if (fs.existsSync(ERRORS_FILE)) {
+function emitNotification(logEntry) {
+    // 1. Send via IPC if running as a child process of server.js
+    if (typeof process.send === 'function') {
         try {
-            const parsed = JSON.parse(fs.readFileSync(ERRORS_FILE, 'utf8'));
-            if (Array.isArray(parsed)) {
-                logs = parsed;
-            }
-        } catch (e) {
-            console.error("Failed to parse local errors.json, starting fresh:", e.message);
-        }
+            process.send({ type: 'notification', data: logEntry });
+            return;
+        } catch (e) { }
     }
-    logs.unshift(logEntry);
-    fs.writeFileSync(ERRORS_FILE, JSON.stringify(logs, null, 2), 'utf8');
+
+    // 2. If running standalone / terminal, emit via HTTP to server.js
+    try {
+        const http = require('http');
+        const data = JSON.stringify(logEntry);
+        const req = http.request({
+            hostname: '127.0.0.1',
+            port: 3001,
+            path: '/api/notifications/emit',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            },
+            timeout: 2000
+        });
+        req.on('error', () => { });
+        req.write(data);
+        req.end();
+    } catch (e) { }
 }
 
 async function logBotError(botName, username, errorMessage, page, sku = null, file = null) {
@@ -25,7 +37,7 @@ async function logBotError(botName, username, errorMessage, page, sku = null, fi
         const filename = `error_${botName.replace(/\s+/g, '_')}_${username}_${timestamp}.png`;
         const screenshotDir = path.join(__dirname, 'error_screenshots');
         const screenshotPath = path.join(screenshotDir, filename);
-        
+
         let screenshotSaved = false;
         if (page) {
             try {
@@ -38,8 +50,9 @@ async function logBotError(botName, username, errorMessage, page, sku = null, fi
                 console.log("Failed to take screenshot:", e.message);
             }
         }
-        
+
         const logEntry = {
+            id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             bot: botName,
             account: username,
             sku: sku,
@@ -50,12 +63,7 @@ async function logBotError(botName, username, errorMessage, page, sku = null, fi
             timestamp: new Date().toISOString()
         };
 
-        // Write to local errors.json
-        try {
-            appendLocalLog(logEntry);
-        } catch (fsErr) {
-            console.error("Failed to log error to local errors.json:", fsErr.message);
-        }
+        emitNotification(logEntry);
     } catch (e) {
         console.error("Failed to log bot error:", e.message);
     }
@@ -64,6 +72,7 @@ async function logBotError(botName, username, errorMessage, page, sku = null, fi
 async function logBotSuccess(botName, username, successMessage, sku = null, file = null) {
     try {
         const logEntry = {
+            id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             bot: botName,
             account: username,
             sku: sku,
@@ -73,12 +82,7 @@ async function logBotSuccess(botName, username, successMessage, sku = null, file
             timestamp: new Date().toISOString()
         };
 
-        // Write to local errors.json
-        try {
-            appendLocalLog(logEntry);
-        } catch (fsErr) {
-            console.error("Failed to log success to local errors.json:", fsErr.message);
-        }
+        emitNotification(logEntry);
     } catch (e) {
         console.error("Failed to log bot success:", e.message);
     }

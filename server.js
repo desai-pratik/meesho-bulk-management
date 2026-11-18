@@ -206,7 +206,18 @@ async function initializeDB() {
             }
         }
 
-        // 4. Notifications/errors are stored locally in errors.json (not in MongoDB)
+        // 4. Notifications are stored strictly in client localStorage (not in JSON file, not in MongoDB)
+        try {
+            const legacyErrorsFile = path.join(__dirname, 'errors.json');
+            if (fs.existsSync(legacyErrorsFile)) {
+                fs.unlinkSync(legacyErrorsFile);
+            }
+            const errorCols = await db.listCollections({ name: 'errors' }).toArray();
+            if (errorCols.length > 0) {
+                await db.collection('errors').drop();
+                console.log("Dropped legacy errors collection from MongoDB Atlas.");
+            }
+        } catch (e) { }
 
         // 5. Migrate Return OTPs (One-time migration check)
         const otpsColl = db.collection('return_otps');
@@ -312,7 +323,12 @@ async function sendOTPEmail(email, otp) {
 
 // JWT Token Authentication Middleware
 function authenticateToken(req, res, next) {
-    if (req.path.startsWith('/auth/') || req.path.startsWith('/api/auth/')) {
+    if (
+        req.path.startsWith('/auth/') ||
+        req.path.startsWith('/api/auth/') ||
+        req.path === '/api/notifications/emit' ||
+        req.path.startsWith('/error_screenshots')
+    ) {
         return next();
     }
 
@@ -1645,56 +1661,12 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// Errors (stored locally in errors.json, not in MongoDB)
-const getErrorsFilePath = () => path.join(__dirname, 'errors.json');
-
-function readLocalErrors() {
-    const errorsPath = getErrorsFilePath();
-    if (!fs.existsSync(errorsPath)) return [];
+// Notifications (Stored strictly in client localStorage, zero JSON file on disk, zero DB storage)
+app.post('/api/notifications/emit', (req, res) => {
     try {
-        const parsed = JSON.parse(fs.readFileSync(errorsPath, 'utf8'));
-        if (!Array.isArray(parsed)) return [];
-        return parsed.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-    } catch (e) {
-        return [];
-    }
-}
-
-function writeLocalErrors(errors) {
-    fs.writeFileSync(getErrorsFilePath(), JSON.stringify(errors, null, 2), 'utf8');
-}
-
-app.get('/api/errors', (req, res) => {
-    try {
-        res.json(readLocalErrors());
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.delete('/api/errors', (req, res) => {
-    try {
-        writeLocalErrors([]);
-        res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.delete('/api/errors/:index', (req, res) => {
-    try {
-        const index = parseInt(req.params.index, 10);
-        const errors = readLocalErrors();
-        if (index >= 0 && index < errors.length) {
-            const [toRemove] = errors.splice(index, 1);
-            writeLocalErrors(errors);
-
-            if (toRemove && toRemove.screenshot) {
-                const screenshotPath = path.join(getErrorScreenshotsPath(), toRemove.screenshot);
-                if (fs.existsSync(screenshotPath)) {
-                    fs.unlinkSync(screenshotPath);
-                }
-            }
+        const notif = req.body;
+        if (notif && typeof notif === 'object') {
+            io.emit('notification', notif);
         }
         res.json({ success: true });
     } catch (e) {
@@ -1780,6 +1752,9 @@ app.post('/api/run/:scriptName', (req, res) => {
                     image: message.image,
                     url: message.url
                 });
+            }
+            if (message && message.type === 'notification') {
+                io.emit('notification', message.data);
             }
         });
 
