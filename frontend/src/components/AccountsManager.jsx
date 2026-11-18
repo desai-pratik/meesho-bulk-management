@@ -176,7 +176,9 @@ function AccountsManager({ scripts, onTrigger }) {
           <input
             type="text"
             className="input-field"
-            placeholder="http://indian-proxy-ip:port or socks5://..."
+            autoComplete="off"
+            name="meesho_proxy_server_url"
+            placeholder="http://indian-proxy-ip:port (or leave blank)"
             value={proxyServer}
             onChange={(e) => setProxyServer(e.target.value)}
             style={{ minWidth: '240px', padding: '6px 10px', fontSize: '0.85rem' }}
@@ -184,6 +186,8 @@ function AccountsManager({ scripts, onTrigger }) {
           <input
             type="text"
             className="input-field"
+            autoComplete="off"
+            name="meesho_proxy_auth_user"
             placeholder="Proxy Username (optional)"
             value={proxyUsername}
             onChange={(e) => setProxyUsername(e.target.value)}
@@ -192,6 +196,8 @@ function AccountsManager({ scripts, onTrigger }) {
           <input
             type="password"
             className="input-field"
+            autoComplete="new-password"
+            name="meesho_proxy_auth_pass"
             placeholder="Proxy Password (optional)"
             value={proxyPassword}
             onChange={(e) => setProxyPassword(e.target.value)}
@@ -200,6 +206,26 @@ function AccountsManager({ scripts, onTrigger }) {
           <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.85rem' }} onClick={saveProxySettings}>
             <Save size={14} /> Save Proxy
           </button>
+          {proxyServer && (
+            <button
+              className="btn btn-danger"
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }}
+              onClick={async () => {
+                setProxyServer('');
+                setProxyUsername('');
+                setProxyPassword('');
+                await fetch(`${BACKEND_URL}/api/proxy-settings`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ server: '', username: '', password: '' })
+                });
+                setProxySavedMsg('Proxy cleared!');
+                setTimeout(() => setProxySavedMsg(''), 3000);
+              }}
+            >
+              Clear
+            </button>
+          )}
           {proxySavedMsg && <span style={{ color: 'var(--success)', fontSize: '0.82rem' }}>{proxySavedMsg}</span>}
         </div>
       </div>

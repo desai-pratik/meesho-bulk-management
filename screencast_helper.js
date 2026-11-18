@@ -138,12 +138,19 @@ function buildLaunchOptions(baseOptions = {}, contextOptions = {}, hasLinuxDispl
     ];
 
     if (process.env.PROXY_SERVER && !options.proxy) {
-        options.proxy = {
-            server: process.env.PROXY_SERVER.trim()
-        };
-        if (process.env.PROXY_USERNAME) options.proxy.username = process.env.PROXY_USERNAME.trim();
-        if (process.env.PROXY_PASSWORD) options.proxy.password = process.env.PROXY_PASSWORD.trim();
-        console.log(`[ScreencastHelper] Routing browser traffic via proxy: ${options.proxy.server}`);
+        let rawProxy = process.env.PROXY_SERVER.trim();
+        const isPrivateLanIp = /^(https?:\/\/|socks5:\/\/)?(192\.168\.|10\.|127\.|localhost)/i.test(rawProxy);
+        if (process.platform === 'linux' && isPrivateLanIp) {
+            console.warn(`[ScreencastHelper] Ignoring private LAN IP (${rawProxy}) in PROXY_SERVER on cloud container.`);
+        } else {
+            if (!/^(https?|socks4|socks5):\/\//i.test(rawProxy)) {
+                rawProxy = `http://${rawProxy}`;
+            }
+            options.proxy = { server: rawProxy };
+            if (process.env.PROXY_USERNAME) options.proxy.username = process.env.PROXY_USERNAME.trim();
+            if (process.env.PROXY_PASSWORD) options.proxy.password = process.env.PROXY_PASSWORD.trim();
+            console.log(`[ScreencastHelper] Routing browser traffic via proxy: ${options.proxy.server}`);
+        }
     }
 
     return options;
