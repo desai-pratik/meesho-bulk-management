@@ -308,7 +308,6 @@ async function processAccount(browser, account, uploadFiles) {
 
         let contextOptions = {
             viewport: null,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
         };
         context = await browser.newContext(contextOptions);
         const page = await context.newPage();

@@ -49,27 +49,39 @@ function wrapPlaywright(chromiumLauncher) {
         const originalLaunch = chromiumLauncher.launch;
         
         chromiumLauncher.launch = async function (options = {}) {
-            // Ensure Xvfb virtual display is running if on Linux and no DISPLAY is set
-            if (process.platform === 'linux' && !process.env.DISPLAY) {
+            const fs = require('fs');
+            // Ensure Xvfb virtual display is running and ready on Linux
+            let hasLinuxDisplay = false;
+            if (process.platform === 'linux') {
                 try {
                     const { execSync, spawn } = require('child_process');
-                    execSync('which Xvfb');
-                    const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac'], {
-                        detached: true,
-                        stdio: 'ignore'
-                    });
-                    xvfb.unref();
-                    process.env.DISPLAY = ':99';
-                    console.log('[ScreencastHelper] Initialized Xvfb virtual display on DISPLAY=:99');
+                    execSync('which Xvfb', { stdio: 'ignore' });
+                    if (!fs.existsSync('/tmp/.X11-unix/X99')) {
+                        try { fs.unlinkSync('/tmp/.X99-lock'); } catch (e) {}
+                        const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac', '-nolisten', 'tcp'], {
+                            detached: true,
+                            stdio: 'ignore'
+                        });
+                        xvfb.unref();
+                        // Wait up to 2s for Xvfb socket to be ready
+                        for (let i = 0; i < 20; i++) {
+                            if (fs.existsSync('/tmp/.X11-unix/X99')) break;
+                            await new Promise(r => setTimeout(r, 100));
+                        }
+                    }
+                    if (fs.existsSync('/tmp/.X11-unix/X99')) {
+                        process.env.DISPLAY = ':99';
+                        hasLinuxDisplay = true;
+                        console.log('[ScreencastHelper] Using Xvfb virtual display on DISPLAY=:99');
+                    }
                 } catch (e) {
-                    console.warn('[ScreencastHelper] Xvfb not available, running headless:', e.message);
+                    console.warn('[ScreencastHelper] Xvfb not available, falling back to headless:', e.message);
                 }
             }
 
             // Determine headless mode:
-            // Running headed (headless: false) is vital to bypass Akamai WAF detection.
-            // On Linux containers (Render, Docker), headed mode runs smoothly inside the Xvfb display.
-            const isHeadless = process.env.HEADLESS === 'true' || (process.platform === 'linux' && !process.env.DISPLAY);
+            // Running headed (headless: false) inside Xvfb bypasses Akamai WAF headless detection.
+            const isHeadless = process.env.HEADLESS === 'true' || (process.platform === 'linux' && !hasLinuxDisplay);
             if (isHeadless) {
                 options.headless = true;
             } else {
@@ -85,9 +97,9 @@ function wrapPlaywright(chromiumLauncher) {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu',
                 '--enable-features=CDPScreenshotNewSurface',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--lang=en-IN,en-US'
             ];
             
             for (const arg of essentialArgs) {
@@ -97,13 +109,19 @@ function wrapPlaywright(chromiumLauncher) {
             }
             
             if (!options.headless) {
-                // When running headed, position the window off-screen so it is invisible to desktop users
                 options.args = options.args.filter(arg => arg !== '--start-maximized');
-                options.args.push('--window-position=-2000,-2000');
-                options.args.push('--window-size=1280,800');
+                if (process.platform === 'linux') {
+                    // Inside virtual Xvfb display, keep normal on-screen coordinates so WAF geometry checks pass
+                    options.args.push('--window-position=0,0');
+                    options.args.push('--window-size=1920,1080');
+                } else {
+                    // On desktop OS (Windows/macOS), position window off-screen so it doesn't interrupt the user
+                    options.args.push('--window-position=-2000,-2000');
+                    options.args.push('--window-size=1280,800');
+                }
             }
 
-            // Prefer official Google Chrome channel if available for real TLS / JA3 / JA8 fingerprint
+            // Prefer official Google Chrome channel if available for real TLS / JA3 / JA4 fingerprint
             let browser = null;
             const originalChannel = options.channel;
             if (!originalChannel && process.env.USE_CHROME_CHANNEL !== 'false') {
@@ -116,7 +134,18 @@ function wrapPlaywright(chromiumLauncher) {
             }
 
             if (!browser) {
-                browser = await originalLaunch.call(chromiumLauncher, options);
+                try {
+                    browser = await originalLaunch.call(chromiumLauncher, options);
+                } catch (e) {
+                    // If headed launch failed (e.g. X server issue), fall back to headless so bot still runs
+                    if (!options.headless) {
+                        console.warn('[ScreencastHelper] Headed launch failed, retrying in headless mode:', e.message);
+                        options.headless = true;
+                        browser = await originalLaunch.call(chromiumLauncher, options);
+                    } else {
+                        throw e;
+                    }
+                }
             }
             currentBrowser = browser;
             
@@ -134,11 +163,17 @@ function wrapPlaywright(chromiumLauncher) {
             };
 
             const originalNewContext = browser.newContext;
-            browser.newContext = async function (contextOptions) {
+            browser.newContext = async function (contextOptions = {}) {
                 if (isShuttingDown || !browser.isConnected()) {
                     throw new Error("Target page, context or browser has been closed");
                 }
-                const context = await originalNewContext.call(browser, contextOptions);
+                const sanitizedOptions = { ...contextOptions };
+                // Remove hardcoded/mismatched userAgent so stealth plugin & native browser UA/Client-Hints stay consistent
+                delete sanitizedOptions.userAgent;
+                if (!sanitizedOptions.locale) sanitizedOptions.locale = 'en-IN';
+                if (!sanitizedOptions.timezoneId) sanitizedOptions.timezoneId = 'Asia/Kolkata';
+
+                const context = await originalNewContext.call(browser, sanitizedOptions);
                 
                 const originalNewPage = context.newPage;
                 context.newPage = async function () {

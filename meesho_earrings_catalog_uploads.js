@@ -298,12 +298,6 @@ async function processAccount(browser, account, uploadFiles) {
 
     const context = await browser.newContext({
         viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    });
-
-    // Inject stealth scripts to look like a human
-        // Add fake chrome object
-        window.chrome = { runtime: {} };
     });
 
     const page = await context.newPage();

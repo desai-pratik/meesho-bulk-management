@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     procps \
     libgbm-dev \
     xvfb \
+    xauth \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,5 +36,5 @@ ENV PORT=3001
 ENV HEADLESS=false
 ENV NODE_ENV=production
 
-# Run with xvfb-run to provide a virtual display for headed Chrome (bypasses Akamai WAF)
-CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1920x1080x24", "node", "server.js"]
+# Start Node server directly so port binding happens immediately on Render; Xvfb is managed by server.js / screencast_helper.js
+CMD ["node", "server.js"]

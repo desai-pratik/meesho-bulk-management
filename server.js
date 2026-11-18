@@ -1784,18 +1784,21 @@ app.get('*any', (req, res, next) => {
 
 // Server Listen
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, async () => {
-    console.log(`Backend server running on http://localhost:${PORT}`);
-    // Auto-start virtual X display on Linux if DISPLAY is not already set
-    if (process.platform === 'linux' && !process.env.DISPLAY) {
+server.listen(PORT, '0.0.0.0', async () => {
+    console.log(`Backend server running on http://0.0.0.0:${PORT}`);
+    // Auto-start virtual X display on Linux if not already running
+    if (process.platform === 'linux') {
         try {
             const { execSync, spawn } = require('child_process');
-            execSync('which Xvfb');
-            const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac'], {
-                detached: true,
-                stdio: 'ignore'
-            });
-            xvfb.unref();
+            execSync('which Xvfb', { stdio: 'ignore' });
+            if (!fs.existsSync('/tmp/.X11-unix/X99')) {
+                try { fs.unlinkSync('/tmp/.X99-lock'); } catch (e) {}
+                const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac', '-nolisten', 'tcp'], {
+                    detached: true,
+                    stdio: 'ignore'
+                });
+                xvfb.unref();
+            }
             process.env.DISPLAY = ':99';
             console.log('Virtual X display started via Xvfb on DISPLAY=:99');
         } catch (e) {

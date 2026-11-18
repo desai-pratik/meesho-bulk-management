@@ -62,13 +62,8 @@ async function fetchAccountStats(browser, account) {
 
     let contextOptions = {
         viewport: null,
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     };
     const context = await browser.newContext(contextOptions);
-    
-    // Inject stealth scripts to look like a human
-        window.chrome = { runtime: {} };
-    });
 
     const page = await context.newPage();
 
