@@ -23,6 +23,13 @@ let stealthChromium = null;
 try {
     const { chromium } = require('playwright-extra');
     const stealth = require('puppeteer-extra-plugin-stealth')();
+    // Disable outdated evasions that forge mismatched OS/UA/Sec-CH-UA/WebGL signatures flagged by Akamai WAF:
+    // - user-agent-override forces Windows UA on Linux TCP stack and injects Chrome 89 '" Not;A Brand";v="99"'
+    // - webgl.vendor forces macOS 'Intel Iris OpenGL Engine' on Linux/Windows
+    // - navigator.languages hardcodes ['en-US', 'en'] regardless of context locale
+    stealth.enabledEvasions.delete('user-agent-override');
+    stealth.enabledEvasions.delete('webgl.vendor');
+    stealth.enabledEvasions.delete('navigator.languages');
     chromium.use(stealth);
     stealthChromium = chromium;
 } catch (e) {
@@ -92,20 +99,39 @@ function wrapPlaywright(chromiumLauncher) {
                 options.args = [];
             }
             
-            // Essential container flags for Linux / Docker / Render
+            // Essential container & Akamai WAF bypass flags for Linux / Docker / Render
             const essentialArgs = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--enable-features=CDPScreenshotNewSurface',
                 '--disable-blink-features=AutomationControlled',
-                '--lang=en-IN,en-US'
+                '--disable-http2',
+                '--disable-infobars',
+                '--lang=en-US,en'
             ];
             
             for (const arg of essentialArgs) {
                 if (!options.args.includes(arg)) {
                     options.args.push(arg);
                 }
+            }
+
+            // Ensure --enable-automation is always stripped across all bot scripts
+            if (!options.ignoreDefaultArgs) {
+                options.ignoreDefaultArgs = ['--enable-automation'];
+            } else if (Array.isArray(options.ignoreDefaultArgs) && !options.ignoreDefaultArgs.includes('--enable-automation')) {
+                options.ignoreDefaultArgs.push('--enable-automation');
+            }
+
+            // Support optional proxy configuration via environment variables (e.g. for Indian residential proxy on cloud hosts)
+            if (process.env.PROXY_SERVER && !options.proxy) {
+                options.proxy = {
+                    server: process.env.PROXY_SERVER.trim()
+                };
+                if (process.env.PROXY_USERNAME) options.proxy.username = process.env.PROXY_USERNAME.trim();
+                if (process.env.PROXY_PASSWORD) options.proxy.password = process.env.PROXY_PASSWORD.trim();
+                console.log(`[ScreencastHelper] Routing browser traffic via proxy: ${options.proxy.server}`);
             }
             
             if (!options.headless) {
@@ -168,10 +194,14 @@ function wrapPlaywright(chromiumLauncher) {
                     throw new Error("Target page, context or browser has been closed");
                 }
                 const sanitizedOptions = { ...contextOptions };
-                // Remove hardcoded/mismatched userAgent so stealth plugin & native browser UA/Client-Hints stay consistent
+                // Remove hardcoded/mismatched userAgent so native browser UA, TCP OS stack, and Client-Hints stay 100% consistent
                 delete sanitizedOptions.userAgent;
-                if (!sanitizedOptions.locale) sanitizedOptions.locale = 'en-IN';
+                delete sanitizedOptions.locale;
                 if (!sanitizedOptions.timezoneId) sanitizedOptions.timezoneId = 'Asia/Kolkata';
+                sanitizedOptions.extraHTTPHeaders = {
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    ...(sanitizedOptions.extraHTTPHeaders || {})
+                };
 
                 const context = await originalNewContext.call(browser, sanitizedOptions);
                 
@@ -181,6 +211,7 @@ function wrapPlaywright(chromiumLauncher) {
                         throw new Error("Target page, context or browser has been closed");
                     }
                     const page = await originalNewPage.apply(context, arguments);
+                    enhancePageForWAF(page);
                     setupScreencast(page);
                     return page;
                 };
@@ -193,6 +224,7 @@ function wrapPlaywright(chromiumLauncher) {
                     throw new Error("Target page, context or browser has been closed");
                 }
                 const page = await originalNewPage.apply(browser, arguments);
+                enhancePageForWAF(page);
                 setupScreencast(page);
                 return page;
             };
@@ -200,6 +232,65 @@ function wrapPlaywright(chromiumLauncher) {
             return browser;
         };
     }
+}
+
+function enhancePageForWAF(page) {
+    if (!page || page._wafEnhanced) return;
+    page._wafEnhanced = true;
+
+    const originalGoto = page.goto;
+    page.goto = async function (url, options = {}) {
+        const isMeeshoLogin = typeof url === 'string' && url.includes('supplier.meesho.com/panel/v3/new/root/login');
+
+        if (isMeeshoLogin && !page._meeshoWarmupDone) {
+            page._meeshoWarmupDone = true;
+            try {
+                // Warm up Akamai cookies (ak_bmsc / bm_sz / _abck) on the public root domain first
+                await originalGoto.call(page, 'https://supplier.meesho.com/', {
+                    waitUntil: 'domcontentloaded',
+                    timeout: 20000
+                });
+                await page.waitForTimeout(1500);
+                try {
+                    await page.mouse.move(250 + Math.floor(Math.random() * 150), 220 + Math.floor(Math.random() * 150));
+                } catch (e) {}
+            } catch (e) {
+                // Continue to target URL even if warm-up times out
+            }
+        }
+
+        const gotoOpts = isMeeshoLogin
+            ? { referer: 'https://supplier.meesho.com/', ...options }
+            : options;
+
+        let response = await originalGoto.call(page, url, gotoOpts);
+
+        if (isMeeshoLogin) {
+            try {
+                const title = await page.title().catch(() => '');
+                const bodyText = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
+                if (title.includes('Access Denied') || bodyText.includes("You don't have permission to access")) {
+                    console.warn('[ScreencastHelper] Akamai Access Denied detected on initial login navigation. Retrying via supplier homepage...');
+                    await page.context().clearCookies().catch(() => {});
+                    await page.waitForTimeout(2000);
+                    await originalGoto.call(page, 'https://supplier.meesho.com/', {
+                        waitUntil: 'domcontentloaded',
+                        timeout: 20000
+                    }).catch(() => {});
+                    await page.waitForTimeout(2000);
+                    response = await originalGoto.call(page, url, gotoOpts);
+
+                    const retryTitle = await page.title().catch(() => '');
+                    const retryBody = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
+                    if (retryTitle.includes('Access Denied') || retryBody.includes("You don't have permission to access")) {
+                        console.error('[ScreencastHelper] Akamai WAF blocked access from this server IP (Geo/Datacenter IP block). Set PROXY_SERVER env var to an Indian proxy if running on a US/foreign cloud host.');
+                    }
+                }
+            } catch (e) {}
+        }
+
+        return response;
+    };
 }
 
 async function setupScreencast(page) {
