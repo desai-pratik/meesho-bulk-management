@@ -154,7 +154,7 @@ async function runFetcher() {
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
     });
 
-    const BATCH_SIZE = 2; // Process 2 accounts at a time
+    const BATCH_SIZE = 1; // Process 1 account at a time for stability and WAF compliance
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
         if (!browser || !browser.isConnected()) {
             console.log("Browser closed or disconnected. Aborting remaining batches.");

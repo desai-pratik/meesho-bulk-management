@@ -1,9 +1,9 @@
 require('dotenv').config();
 
 // Polyfill missing browser globals for pdf-parse
-global.DOMMatrix = class DOMMatrix {};
-global.ImageData = class ImageData {};
-global.Path2D = class Path2D {};
+global.DOMMatrix = class DOMMatrix { };
+global.ImageData = class ImageData { };
+global.Path2D = class Path2D { };
 
 const express = require('express');
 const cors = require('cors');
@@ -29,6 +29,7 @@ app.use('/product_images', express.static(path.join(__dirname, 'product_images')
 
 const server = http.createServer(app);
 const io = new Server(server, {
+    maxHttpBufferSize: 50 * 1024 * 1024, // 50 MB for syncing uploaded .xlsx / image files to local worker
     cors: {
         origin: "*", // allow frontend to connect
         methods: ["GET", "POST"]
@@ -37,6 +38,55 @@ const io = new Server(server, {
 
 // Map of currently running processes
 const activeProcesses = new Map();
+// Remote processes running on connected Local Chrome Worker (Windows PC in India)
+const remoteRunningProcesses = new Map();
+let localChromeWorkerSocket = null;
+
+io.on('connection', (socket) => {
+    const role = socket.handshake && socket.handshake.auth && socket.handshake.auth.role;
+    if (role === 'local-chrome-worker') {
+        console.log(`[LocalChromeWorker] Connected from local PC (${socket.id})`);
+        localChromeWorkerSocket = socket;
+        io.emit('workerStatus', { connected: true });
+
+        socket.on('worker:screencast', (data) => {
+            io.emit('screencast', data);
+        });
+        socket.on('worker:log', (data) => {
+            io.emit('log', data);
+        });
+        socket.on('worker:notification', (data) => {
+            io.emit('notification', data);
+        });
+        socket.on('worker:processStatus', (data) => {
+            if (data && data.script) {
+                if (data.status === 'running') {
+                    remoteRunningProcesses.set(data.script, { startTime: data.startTime || Date.now() });
+                } else {
+                    remoteRunningProcesses.delete(data.script);
+                }
+            }
+            io.emit('processStatus', data);
+        });
+
+        socket.on('disconnect', () => {
+            if (localChromeWorkerSocket === socket) {
+                console.log('[LocalChromeWorker] Disconnected');
+                localChromeWorkerSocket = null;
+                for (const [scriptName] of remoteRunningProcesses) {
+                    io.emit('processStatus', { script: scriptName, status: 'stopped' });
+                }
+                remoteRunningProcesses.clear();
+                io.emit('workerStatus', { connected: false });
+            }
+        });
+    } else {
+        // Regular browser UI client: tell it immediately whether Local Chrome Worker is connected
+        socket.emit('workerStatus', {
+            connected: Boolean(localChromeWorkerSocket && localChromeWorkerSocket.connected)
+        });
+    }
+});
 
 // Helpers for file paths
 
@@ -201,7 +251,7 @@ async function initializeDB() {
                             { upsert: true }
                         );
                         console.log(`Seeded ${cat} single catalog defaults to MongoDB.`);
-                    } catch (e) {}
+                    } catch (e) { }
                 }
             }
         }
@@ -232,7 +282,7 @@ async function initializeDB() {
                         await otpsColl.insertMany(otps);
                         console.log(`Migrated ${otps.length} return OTPs to MongoDB.`);
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
         }
 
@@ -254,7 +304,7 @@ async function initializeDB() {
                         await statsColl.insertMany(toInsert);
                         console.log(`Migrated ${toInsert.length} stats to MongoDB.`);
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
         }
 
@@ -391,8 +441,8 @@ app.post('/api/auth/register', async (req, res) => {
 
         const sendResult = await sendOTPEmail(userData.email, otp);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Verification OTP sent to your email',
             fallback: sendResult.fallback || false
         });
@@ -427,7 +477,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
         await usersColl.updateOne(
             { email: email.toLowerCase().trim() },
-            { 
+            {
                 $set: { isVerified: true },
                 $unset: { otp: "", otpExpiry: "" }
             }
@@ -518,8 +568,8 @@ app.post('/api/auth/resend-otp', async (req, res) => {
 
         const sendResult = await sendOTPEmail(user.email, otp);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Verification OTP sent to your email',
             fallback: sendResult.fallback || false
         });
@@ -554,8 +604,8 @@ app.post('/api/auth/reset-password-request', async (req, res) => {
 
         const sendResult = await sendOTPEmail(user.email, otp);
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Password reset OTP sent to your email',
             fallback: sendResult.fallback || false
         });
@@ -592,7 +642,7 @@ app.post('/api/auth/reset-password-confirm', async (req, res) => {
 
         await usersColl.updateOne(
             { email: email.toLowerCase().trim() },
-            { 
+            {
                 $set: { password: hashedPassword, isVerified: true },
                 $unset: { otp: "", otpExpiry: "" }
             }
@@ -978,7 +1028,7 @@ app.post('/api/inventory-updates/upload', upload.single('file'), async (req, res
         }
 
         // Clean up uploaded file
-        fs.unlink(filePath, () => {});
+        fs.unlink(filePath, () => { });
 
         res.json({ success: true, count: parsed.length, rows: parsed });
     } catch (e) {
@@ -1006,7 +1056,7 @@ app.post('/api/inventory-stock-updates/upload', upload.single('file'), async (re
         }
 
         // Clean up uploaded file
-        fs.unlink(filePath, () => {});
+        fs.unlink(filePath, () => { });
 
         res.json({ success: true, count: parsed.length, rows: parsed });
     } catch (e) {
@@ -1146,7 +1196,7 @@ app.post('/api/sku-images', uploadSkuImage.array('files'), async (req, res) => {
         const db = await connectDB();
         const collection = db.collection('product_images');
         const results = [];
-        
+
         for (let file of req.files) {
             const sku = path.parse(file.originalname).name.trim();
             const filename = file.filename;
@@ -1157,7 +1207,7 @@ app.post('/api/sku-images', uploadSkuImage.array('files'), async (req, res) => {
                 url,
                 uploadDate: new Date()
             };
-            
+
             await collection.updateOne(
                 { sku },
                 { $set: record },
@@ -1165,7 +1215,7 @@ app.post('/api/sku-images', uploadSkuImage.array('files'), async (req, res) => {
             );
             results.push(record);
         }
-        
+
         res.json({ success: true, message: 'SKU images uploaded successfully', files: results });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1177,7 +1227,7 @@ app.delete('/api/sku-images/:sku', async (req, res) => {
         const { sku } = req.params;
         const db = await connectDB();
         const collection = db.collection('product_images');
-        
+
         const record = await collection.findOne({ sku });
         if (record) {
             const filepath = path.join(getProductImagesPath(), record.filename);
@@ -1209,7 +1259,7 @@ app.get('/api/order-pdfs', async (req, res) => {
         const dir = getUploadedPdfsPath();
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         const files = fs.readdirSync(dir);
-        
+
         const list = [];
         for (let file of files) {
             const stats = fs.statSync(path.join(dir, file));
@@ -1232,7 +1282,7 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ error: 'No PDF file uploaded' });
         }
-        
+
         const db = await connectDB();
         const collection = db.collection('order_labels');
         const pdfPath = req.file.path;
@@ -1241,24 +1291,24 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
         const parser = new pdfParse.PDFParse({ data: dataBuffer });
         const result = await parser.getText();
         await parser.destroy();
-        
+
         const pages = result.pages || [];
-        
+
         let successCount = 0;
         let errors = [];
         const bulkOps = [];
-        
+
         for (let page of pages) {
             const text = page.text;
             const pageNum = page.num;
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-            
+
             let orderId = '';
             const orderMatch = text.match(/\b(3\d{14,17}(?:_\d+)?)\b/);
             if (orderMatch) {
                 orderId = orderMatch[1];
             }
-            
+
             let awb = '';
             const awbMatch = text.match(/\b(VL\d{10,14}|SF\w{8,12})\b/i);
             if (awbMatch) {
@@ -1273,7 +1323,7 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
                     }
                 }
             }
-            
+
             if (!awb) {
                 for (let line of lines) {
                     const clean = line.replace(/\s+/g, '');
@@ -1287,7 +1337,7 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
                     }
                 }
             }
-            
+
             let sku = '';
             const skuHeaderIndex = lines.findIndex(l => {
                 const up = l.toUpperCase();
@@ -1297,19 +1347,19 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
                 const nextLine = lines[skuHeaderIndex + 1];
                 sku = nextLine.split(/\s+/)[0];
             }
-            
+
             let customerName = '';
             const custIndex = lines.findIndex(l => l.toLowerCase().includes('customer address'));
             if (custIndex !== -1 && custIndex < lines.length - 1) {
                 customerName = lines[custIndex + 1];
             }
-            
+
             if (orderId || awb) {
                 const cleanAwb = awb.trim();
                 const cleanOrderId = orderId.trim();
                 const cleanSku = sku.trim();
                 const cleanName = customerName.trim();
-                
+
                 bulkOps.push({
                     updateOne: {
                         filter: { orderId: cleanOrderId },
@@ -1331,11 +1381,11 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
                 errors.push(`Page ${pageNum}: Could not find Order No or AWB barcode.`);
             }
         }
-        
+
         if (bulkOps.length > 0) {
             await collection.bulkWrite(bulkOps, { ordered: false });
         }
-        
+
         res.json({
             success: true,
             message: `Parsed PDF successfully. Imported ${successCount} orders.`,
@@ -1344,7 +1394,7 @@ app.post('/api/order-pdfs', uploadPdf.single('file'), async (req, res) => {
             errorsCount: errors.length,
             errors: errors
         });
-        
+
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -1355,14 +1405,14 @@ app.delete('/api/order-pdfs/:filename', async (req, res) => {
         const { filename } = req.params;
         const sanitized = path.basename(filename);
         const filepath = path.join(getUploadedPdfsPath(), sanitized);
-        
+
         if (fs.existsSync(filepath)) {
             fs.unlinkSync(filepath);
         }
-        
+
         const db = await connectDB();
         await db.collection('order_labels').deleteMany({ pdfName: sanitized });
-        
+
         res.json({ success: true, message: 'PDF and associated orders deleted successfully' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1376,10 +1426,10 @@ app.get('/api/lookup-barcode', async (req, res) => {
         if (!barcode) {
             return res.status(400).json({ error: 'Barcode parameter is required' });
         }
-        
+
         const db = await connectDB();
         const cleanBarcode = barcode.trim();
-        
+
         const order = await db.collection('order_labels').findOne({
             $or: [
                 { awb: cleanBarcode },
@@ -1388,30 +1438,30 @@ app.get('/api/lookup-barcode', async (req, res) => {
                 { orderId: { $regex: cleanBarcode, $options: 'i' } }
             ]
         });
-        
+
         if (!order) {
             return res.status(404).json({ error: 'Order not found for scanned barcode' });
         }
-        
+
         // Find mapped design name (if any)
         const mapping = await db.collection('sku_mappings').findOne({ sku: order.sku });
         const designName = mapping ? mapping.designName : order.sku;
-        
+
         // Find matching image (using designName first, fallback to raw sku)
         let skuImage = null;
-        
+
         // Try searching product_images collection by designName
-        skuImage = await db.collection('product_images').findOne({ 
-            sku: { $regex: new RegExp(`^${designName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } 
+        skuImage = await db.collection('product_images').findOne({
+            sku: { $regex: new RegExp(`^${designName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') }
         });
-        
+
         // Fallback: search product_images collection by raw sku (if different from designName)
         if (!skuImage && designName !== order.sku) {
-            skuImage = await db.collection('product_images').findOne({ 
-                sku: { $regex: new RegExp(`^${order.sku.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } 
+            skuImage = await db.collection('product_images').findOne({
+                sku: { $regex: new RegExp(`^${order.sku.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') }
             });
         }
-        
+
         // Try searching filesystem by designName or raw sku
         if (!skuImage) {
             const dir = getProductImagesPath();
@@ -1423,7 +1473,7 @@ app.get('/api/lookup-barcode', async (req, res) => {
                 if (!foundFile && designName !== order.sku) {
                     foundFile = files.find(f => path.parse(f).name.toLowerCase() === order.sku.toLowerCase());
                 }
-                
+
                 if (foundFile) {
                     skuImage = {
                         sku: designName,
@@ -1433,7 +1483,7 @@ app.get('/api/lookup-barcode', async (req, res) => {
                 }
             }
         }
-        
+
         res.json({
             success: true,
             order: {
@@ -1442,7 +1492,7 @@ app.get('/api/lookup-barcode', async (req, res) => {
             },
             skuImage: skuImage || null
         });
-        
+
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -1454,27 +1504,27 @@ app.post('/api/sku-mappings', upload.single('file'), async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ error: 'No Excel file uploaded' });
         }
-        
+
         const db = await connectDB();
         const collection = db.collection('sku_mappings');
-        
+
         const workbook = XLSX.readFile(req.file.path);
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        
+
         // Convert sheet to row arrays [ [sku, designName], [sku, designName] ]
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        
+
         const bulkOps = [];
         const batchSize = 50000;
         let importedCount = 0;
-        
+
         for (let row of rows) {
             if (!Array.isArray(row) || row.length === 0) continue;
-            
+
             const sku = String(row[0] || '').trim();
             const designName = String(row[1] || '').trim();
-            
+
             if (sku && designName && sku.toLowerCase() !== 'sku') {
                 bulkOps.push({
                     updateOne: {
@@ -1491,14 +1541,14 @@ app.post('/api/sku-mappings', upload.single('file'), async (req, res) => {
                 });
             }
         }
-        
+
         // Execute bulkWrite in batches
         for (let i = 0; i < bulkOps.length; i += batchSize) {
             const batch = bulkOps.slice(i, i + batchSize);
             await collection.bulkWrite(batch, { ordered: false });
             importedCount += batch.length;
         }
-        
+
         // Store upload stats
         await db.collection('mapping_stats').updateOne(
             { name: 'last_import' },
@@ -1511,13 +1561,13 @@ app.post('/api/sku-mappings', upload.single('file'), async (req, res) => {
             },
             { upsert: true }
         );
-        
+
         res.json({
             success: true,
             message: `Successfully parsed spreadsheet. Imported/Updated ${importedCount} SKU mappings.`,
             importedCount
         });
-        
+
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -1541,7 +1591,7 @@ app.get('/api/sku-mappings/search', async (req, res) => {
     try {
         const { q, page = 1, limit = 20 } = req.query;
         const db = await connectDB();
-        
+
         const query = {};
         if (q) {
             query.$or = [
@@ -1549,7 +1599,7 @@ app.get('/api/sku-mappings/search', async (req, res) => {
                 { designName: { $regex: q, $options: 'i' } }
             ];
         }
-        
+
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const total = await db.collection('sku_mappings').countDocuments(query);
         const mappings = await db.collection('sku_mappings')
@@ -1557,7 +1607,7 @@ app.get('/api/sku-mappings/search', async (req, res) => {
             .skip(skip)
             .limit(parseInt(limit))
             .toArray();
-            
+
         res.json({
             mappings,
             total,
@@ -1671,8 +1721,10 @@ app.get('/api/scripts', (req, res) => {
             let name = s.replace('meesho_', '').replace('.js', '').replace(/_/g, ' ');
             name = name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-            const isRunning = activeProcesses.has(s);
-            const proc = isRunning ? activeProcesses.get(s) : null;
+            const isLocalRunning = activeProcesses.has(s);
+            const isRemoteRunning = remoteRunningProcesses.has(s);
+            const isRunning = isLocalRunning || isRemoteRunning;
+            const proc = isLocalRunning ? activeProcesses.get(s) : (isRemoteRunning ? remoteRunningProcesses.get(s) : null);
 
             return {
                 filename: s,
@@ -1688,7 +1740,126 @@ app.get('/api/scripts', (req, res) => {
     }
 });
 
-app.post('/api/run/:scriptName', (req, res) => {
+// Proxy Settings (persisted in MongoDB so Render deployments can route through an Indian proxy without redeploying)
+app.get('/api/proxy-settings', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const doc = await db.collection('settings').findOne({ key: 'proxy' });
+        res.json({
+            server: (doc && doc.server) || process.env.PROXY_SERVER || '',
+            username: (doc && doc.username) || process.env.PROXY_USERNAME || '',
+            password: (doc && doc.password) || process.env.PROXY_PASSWORD || ''
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/proxy-settings', async (req, res) => {
+    try {
+        const { server = '', username = '', password = '' } = req.body || {};
+        const db = await connectDB();
+        await db.collection('settings').updateOne(
+            { key: 'proxy' },
+            {
+                $set: {
+                    key: 'proxy',
+                    server: String(server).trim(),
+                    username: String(username).trim(),
+                    password: String(password).trim(),
+                    updatedAt: new Date()
+                }
+            },
+            { upsert: true }
+        );
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Helper to spawn a bot script locally and optionally forward events to cloudSocket
+async function spawnLocalBotScript(scriptName, { account, selectedAccounts } = {}, cloudSocket = null) {
+    const env = Object.assign({}, process.env);
+    delete env.NODE_OPTIONS;
+
+    try {
+        const db = await connectDB();
+        const proxyDoc = await db.collection('settings').findOne({ key: 'proxy' });
+        if (proxyDoc && proxyDoc.server) {
+            env.PROXY_SERVER = proxyDoc.server;
+            if (proxyDoc.username) env.PROXY_USERNAME = proxyDoc.username;
+            if (proxyDoc.password) env.PROXY_PASSWORD = proxyDoc.password;
+        }
+    } catch (e) { }
+
+    if (account) {
+        env.TARGET_ACCOUNT = String(account).trim();
+    } else if (selectedAccounts !== undefined) {
+        if (Array.isArray(selectedAccounts)) {
+            env.TARGET_ACCOUNT = selectedAccounts.length > 0
+                ? selectedAccounts.map(a => String(a).trim()).filter(Boolean).join(',')
+                : '__NO_ACCOUNTS_SELECTED__';
+        } else if (typeof selectedAccounts === 'string' && selectedAccounts.trim()) {
+            env.TARGET_ACCOUNT = selectedAccounts.trim();
+        }
+    }
+
+    const startTime = Date.now();
+    const child = spawn(process.execPath, ['-r', './screencast_helper.js', scriptName], {
+        cwd: __dirname,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+    });
+    activeProcesses.set(scriptName, { child, startTime });
+
+    const emitBoth = (eventName, payload) => {
+        io.emit(eventName, payload);
+        if (cloudSocket && cloudSocket.connected) {
+            cloudSocket.emit(`worker:${eventName}`, payload);
+        }
+    };
+
+    child.on('message', (message) => {
+        if (message && message.type === 'screencast') {
+            emitBoth('screencast', {
+                script: scriptName,
+                image: message.image,
+                url: message.url
+            });
+        }
+        if (message && message.type === 'notification') {
+            emitBoth('notification', message.data);
+        }
+    });
+
+    child.stdout.on('data', (data) => {
+        const msg = data.toString();
+        console.log(`[${scriptName}] ${msg.trim()}`);
+        emitBoth('log', { script: scriptName, type: 'info', message: msg });
+    });
+
+    child.stderr.on('data', (data) => {
+        const msg = data.toString();
+        console.error(`[${scriptName} ERROR] ${msg.trim()}`);
+        emitBoth('log', { script: scriptName, type: 'error', message: msg });
+    });
+
+    child.on('close', (code) => {
+        console.log(`[${scriptName}] Exited with code ${code}`);
+        emitBoth('log', { script: scriptName, type: 'system', message: `Process exited with code ${code}` });
+        activeProcesses.delete(scriptName);
+        emitBoth('processStatus', { script: scriptName, status: 'stopped' });
+    });
+
+    emitBoth('processStatus', {
+        script: scriptName,
+        status: 'running',
+        startTime
+    });
+}
+
+app.post('/api/run/:scriptName', async (req, res) => {
     const { scriptName } = req.params;
     const { account, selectedAccounts } = req.body || {};
 
@@ -1703,7 +1874,7 @@ app.post('/api/run/:scriptName', (req, res) => {
         return res.status(404).json({ error: 'Script not found' });
     }
 
-    if (activeProcesses.has(scriptName)) {
+    if (activeProcesses.has(scriptName) || remoteRunningProcesses.has(scriptName)) {
         return res.status(400).json({ error: 'Script is already running' });
     }
 
@@ -1724,6 +1895,36 @@ app.post('/api/run/:scriptName', (req, res) => {
             } else if (typeof selectedAccounts === 'string' && selectedAccounts.trim()) {
                 targetAccounts = selectedAccounts.split(',').map(a => a.trim()).filter(Boolean);
             }
+
+            const singleCatalogImages = [];
+            const singleDir = getSingleCatalogImagesPath();
+            if (fs.existsSync(singleDir)) {
+                for (const f of fs.readdirSync(singleDir)) {
+                    const full = path.join(singleDir, f);
+                    if (fs.statSync(full).isFile()) {
+                        singleCatalogImages.push({
+                            name: f,
+                            base64: fs.readFileSync(full).toString('base64')
+                        });
+                    }
+                }
+            }
+
+            const startTime = Date.now();
+            remoteRunningProcesses.set(scriptName, { startTime });
+            io.emit('log', {
+                script: scriptName,
+                type: 'system',
+                message: '[LocalChromeBridge] Delegating bot execution to your Local Chrome on Windows (Indian IP)...'
+            });
+            localChromeWorkerSocket.emit('cloud:runScript', {
+                scriptName,
+                account,
+                selectedAccounts,
+                uploadedFiles,
+                singleCatalogImages
+            });
+            return res.json({ success: true, message: 'Script started on Local Chrome' });
         }
 
         if (targetAccounts !== null) {
@@ -1811,6 +2012,14 @@ app.post('/api/run/:scriptName', (req, res) => {
 app.post('/api/stop/:scriptName', (req, res) => {
     const { scriptName } = req.params;
 
+    if (remoteRunningProcesses.has(scriptName) && localChromeWorkerSocket && localChromeWorkerSocket.connected) {
+        localChromeWorkerSocket.emit('cloud:stopScript', { scriptName });
+        remoteRunningProcesses.delete(scriptName);
+        io.emit('log', { script: scriptName, type: 'system', message: 'Process stopped by user (Local Chrome)' });
+        io.emit('processStatus', { script: scriptName, status: 'stopped' });
+        return res.json({ success: true, message: 'Script stopped on Local Chrome' });
+    }
+
     if (activeProcesses.has(scriptName)) {
         const proc = activeProcesses.get(scriptName);
         try {
@@ -1820,9 +2029,9 @@ app.post('/api/stop/:scriptName', (req, res) => {
                     if (proc.child.exitCode === null) {
                         proc.child.kill('SIGKILL');
                     }
-                } catch (e) {}
+                } catch (e) { }
             }, 1500);
-        } catch (e) {}
+        } catch (e) { }
         activeProcesses.delete(scriptName);
         io.emit('log', { script: scriptName, type: 'system', message: 'Process stopped by user' });
         io.emit('processStatus', { script: scriptName, status: 'stopped' });
@@ -1851,7 +2060,7 @@ server.listen(PORT, '0.0.0.0', async () => {
             const { execSync, spawn } = require('child_process');
             execSync('which Xvfb', { stdio: 'ignore' });
             if (!fs.existsSync('/tmp/.X11-unix/X99')) {
-                try { fs.unlinkSync('/tmp/.X99-lock'); } catch (e) {}
+                try { fs.unlinkSync('/tmp/.X99-lock'); } catch (e) { }
                 const xvfb = spawn('Xvfb', [':99', '-screen', '0', '1920x1080x24', '-ac', '-nolisten', 'tcp'], {
                     detached: true,
                     stdio: 'ignore'
@@ -1865,4 +2074,76 @@ server.listen(PORT, '0.0.0.0', async () => {
         }
     }
     await initializeDB();
+
+    // When running locally on Windows/macOS, automatically connect as a Local Chrome Worker to the live Render URL
+    if (process.platform !== 'linux' && process.env.DISABLE_CLOUD_BRIDGE !== 'true') {
+        try {
+            let ioClient;
+            try {
+                ioClient = require('socket.io-client').io;
+            } catch (e) {
+                ioClient = require('./frontend/node_modules/socket.io-client').io;
+            }
+            const cloudUrl = process.env.RENDER_CLOUD_URL || 'https://meesho-bulk-management-1.onrender.com';
+            const cloudSocket = ioClient(cloudUrl, {
+                auth: { role: 'local-chrome-worker' },
+                reconnection: true,
+                reconnectionDelay: 3000
+            });
+
+            cloudSocket.on('connect', () => {
+                console.log(`[LocalChromeBridge] Connected to live cloud server (${cloudUrl})! Bots triggered on the live URL will now run in your Local Chrome.`);
+            });
+
+            cloudSocket.on('cloud:runScript', async (payload = {}) => {
+                const { scriptName, account, selectedAccounts, uploadedFiles, singleCatalogImages } = payload;
+                if (!scriptName || activeProcesses.has(scriptName)) return;
+
+                console.log(`[LocalChromeBridge] Received run command from cloud for ${scriptName}`);
+
+                // Sync uploaded .xlsx files from cloud
+                if (Array.isArray(uploadedFiles)) {
+                    const uploadsDir = getUploadsPath();
+                    for (const existing of fs.readdirSync(uploadsDir)) {
+                        try { fs.unlinkSync(path.join(uploadsDir, existing)); } catch (e) { }
+                    }
+                    for (const fileObj of uploadedFiles) {
+                        if (fileObj && fileObj.name && fileObj.base64) {
+                            fs.writeFileSync(path.join(uploadsDir, path.basename(fileObj.name)), Buffer.from(fileObj.base64, 'base64'));
+                        }
+                    }
+                }
+
+                // Sync single catalog images from cloud
+                if (Array.isArray(singleCatalogImages) && singleCatalogImages.length > 0) {
+                    const singleDir = getSingleCatalogImagesPath();
+                    for (const imgObj of singleCatalogImages) {
+                        if (imgObj && imgObj.name && imgObj.base64) {
+                            fs.writeFileSync(path.join(singleDir, path.basename(imgObj.name)), Buffer.from(imgObj.base64, 'base64'));
+                        }
+                    }
+                }
+
+                await spawnLocalBotScript(scriptName, { account, selectedAccounts }, cloudSocket);
+            });
+
+            cloudSocket.on('cloud:stopScript', ({ scriptName } = {}) => {
+                if (scriptName && activeProcesses.has(scriptName)) {
+                    console.log(`[LocalChromeBridge] Stopping ${scriptName} from cloud request`);
+                    const proc = activeProcesses.get(scriptName);
+                    try {
+                        proc.child.kill('SIGTERM');
+                        setTimeout(() => {
+                            try {
+                                if (proc.child.exitCode === null) proc.child.kill('SIGKILL');
+                            } catch (e) { }
+                        }, 1500);
+                    } catch (e) { }
+                    activeProcesses.delete(scriptName);
+                }
+            });
+        } catch (e) {
+            console.warn('[LocalChromeBridge] Could not initialize cloud worker bridge:', e.message);
+        }
+    }
 });

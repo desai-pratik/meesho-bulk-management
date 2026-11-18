@@ -191,10 +191,10 @@ function wrapPlaywright(chromiumLauncher) {
 }
 
 async function setupScreencast(page) {
-    if (!process.send) return;
+    if (!process.send || !page || page._screencastSetup) return;
+    page._screencastSetup = true;
 
     try {
-        // Start a DevTools Protocol session to stream compositor frames natively
         const client = await page.context().newCDPSession(page);
         
         await client.send('Page.startScreencast', {
@@ -202,7 +202,7 @@ async function setupScreencast(page) {
             quality: 60,
             maxWidth: 1024,
             maxHeight: 768,
-            everyNthFrame: 1 // Stream every frame natively generated
+            everyNthFrame: 1
         });
 
         client.on('Page.screencastFrame', async (frame) => {
@@ -216,19 +216,13 @@ async function setupScreencast(page) {
                     url: url
                 });
 
-                // Acknowledge receipt of the frame so Chrome continues sending new frames
                 await client.send('Page.screencastFrameAck', { sessionId: frame.sessionId });
-            } catch (err) {
-                // Ignore session close / ack errors
-            }
+            } catch (err) {}
         });
     } catch (e) {
-        console.error("Failed to start CDP screencast, falling back to screenshot polling:", e.message);
-        
-        // Fallback: 1000ms screenshot polling in case CDP fails
         let isCapturing = false;
         const interval = setInterval(async () => {
-            if (page.isClosed()) {
+            if (page.isClosed() || isShuttingDown) {
                 clearInterval(interval);
                 return;
             }

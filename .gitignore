@@ -25,3 +25,5 @@ Thumbs.db
 *.jpeg
 *.csv
 *.webp
+.chrome_profiles/
+debug.log
