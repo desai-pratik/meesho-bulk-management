@@ -17,3 +17,5 @@ accounts_login_status.json
 errors.json
 pending_orders_overview_data.json
 return_otps.json
+.chrome_profiles
+debug.log

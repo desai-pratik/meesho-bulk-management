@@ -67,10 +67,10 @@ async function fetchReturnOTPs(browser, account) {
 
     try {
         console.log(`[${username}] Navigating to Meesho...`);
-        await page.goto(LOGIN_URL, { timeout: 3000 });
+        await page.goto(LOGIN_URL, { timeout: 30000 });
 
         const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        await emailInput.waitFor({ state: 'visible', timeout: 3000 });
+        await emailInput.waitFor({ state: 'visible', timeout: 30000 });
 
         console.log(`[${username}] Logging in...`);
         await emailInput.fill(username);
@@ -203,7 +203,7 @@ async function runFetcher() {
         args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
     });
 
-    const BATCH_SIZE = 2; // Process 2 accounts at a time
+    const BATCH_SIZE = 1; // Process 1 account at a time for stability and WAF compliance
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
         if (!browser || !browser.isConnected()) {
             console.log("Browser closed or disconnected. Aborting remaining batches.");
