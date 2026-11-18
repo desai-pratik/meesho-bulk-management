@@ -17,20 +17,43 @@ function wrapPlaywright(playwright) {
         const originalLaunch = playwright.chromium.launch;
         
         playwright.chromium.launch = async function (options = {}) {
-            // Keep headless: false to bypass Akamai WAF detection,
-            // but position the window off-screen so it is invisible to the user.
-            options.headless = false;
+            // Determine headless mode:
+            // On Linux containers (Render, Docker) with no DISPLAY or when HEADLESS=true,
+            // we MUST enable headless mode to avoid "Missing X server or $DISPLAY" crash.
+            const isHeadless = process.env.HEADLESS === 'true' || (process.platform === 'linux' && !process.env.DISPLAY);
+            
+            if (isHeadless) {
+                options.headless = true;
+            } else if (options.headless === undefined) {
+                options.headless = false;
+            }
             
             if (!options.args) {
                 options.args = [];
             }
             
-            // Remove '--start-maximized' to allow off-screen positioning
-            options.args = options.args.filter(arg => arg !== '--start-maximized');
+            // Essential container flags for Linux / Docker / Render
+            const essentialArgs = [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--enable-features=CDPScreenshotNewSurface',
+                '--disable-blink-features=AutomationControlled'
+            ];
             
-            // Position the window off-screen and set a default viewport size
-            options.args.push('--window-position=-2000,-2000');
-            options.args.push('--window-size=1280,800');
+            for (const arg of essentialArgs) {
+                if (!options.args.includes(arg)) {
+                    options.args.push(arg);
+                }
+            }
+            
+            if (!options.headless) {
+                // When running headed (e.g. Windows desktop), position the window off-screen
+                options.args = options.args.filter(arg => arg !== '--start-maximized');
+                options.args.push('--window-position=-2000,-2000');
+                options.args.push('--window-size=1280,800');
+            }
             
             const browser = await originalLaunch.call(playwright.chromium, options);
             
