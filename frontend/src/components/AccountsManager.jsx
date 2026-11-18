@@ -19,7 +19,7 @@ function AccountsManager({ scripts, onTrigger }) {
           const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+            if (parsed && typeof parsed === 'object') {
               localSelection = parsed;
             }
           }
@@ -28,9 +28,9 @@ function AccountsManager({ scripts, onTrigger }) {
         }
 
         const merged = Array.isArray(data) ? data.map(acc => {
-          const isSelected = (localSelection && localSelection[acc.username] !== undefined)
+          const isSelected = (localSelection && typeof localSelection[acc.username] === 'boolean')
             ? localSelection[acc.username]
-            : (acc.isActive !== false);
+            : true;
           return {
             ...acc,
             isActive: isSelected
@@ -40,11 +40,12 @@ function AccountsManager({ scripts, onTrigger }) {
         setAccounts(merged);
         setLoading(false);
 
-        // Keep localStorage updated with initial map
+        // Keep localStorage updated with current selection map
         const initialMap = {};
         merged.forEach(a => { if (a.username) initialMap[a.username] = a.isActive !== false; });
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialMap));
+          window.dispatchEvent(new Event('selected-accounts-updated'));
         } catch (e) {}
       })
       .catch(err => {
@@ -52,14 +53,6 @@ function AccountsManager({ scripts, onTrigger }) {
         setLoading(false);
       });
   }, []);
-
-  const syncSelectionToBackend = (selectionMap) => {
-    fetch(`${BACKEND_URL}/api/local-account-selection`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ selection: selectionMap })
-    }).catch(err => console.error("Error syncing local selection to backend:", err));
-  };
 
   const addAccount = () => {
     setAccounts([...accounts, { username: '', password: '', name: '', isActive: true }]);
@@ -75,9 +68,9 @@ function AccountsManager({ scripts, onTrigger }) {
       newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+        window.dispatchEvent(new Event('selected-accounts-updated'));
       } catch (e) {}
-      syncSelectionToBackend(selectionMap);
-      setSyncStatus('Selection saved locally');
+      setSyncStatus('Selection saved in local storage');
       setTimeout(() => setSyncStatus(''), 2500);
     }
   };
@@ -90,9 +83,9 @@ function AccountsManager({ scripts, onTrigger }) {
     newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = checked; });
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+      window.dispatchEvent(new Event('selected-accounts-updated'));
     } catch (e) {}
-    syncSelectionToBackend(selectionMap);
-    setSyncStatus('Selection saved locally');
+    setSyncStatus('Selection saved in local storage');
     setTimeout(() => setSyncStatus(''), 2500);
   };
 
@@ -106,8 +99,8 @@ function AccountsManager({ scripts, onTrigger }) {
       newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+        window.dispatchEvent(new Event('selected-accounts-updated'));
       } catch (e) {}
-      syncSelectionToBackend(selectionMap);
     }
   };
 
@@ -121,7 +114,13 @@ function AccountsManager({ scripts, onTrigger }) {
       });
       const data = await res.json();
       if (data.success) {
-        alert("Accounts saved successfully! (Selection state stored locally, not in MongoDB)");
+        const selectionMap = {};
+        validAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+          window.dispatchEvent(new Event('selected-accounts-updated'));
+        } catch (e) {}
+        alert("Accounts saved successfully!");
       }
     } catch (e) {
       console.error(e);
@@ -137,7 +136,7 @@ function AccountsManager({ scripts, onTrigger }) {
         <div>
           <h2 style={{ fontSize: '1.4rem', margin: 0 }}>Manage Meesho Accounts</h2>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>Account selection is saved locally (not in MongoDB)</span>
+            <span>Account selection is saved in browser local storage</span>
             {syncStatus && (
               <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                 • {syncStatus}
@@ -176,7 +175,7 @@ function AccountsManager({ scripts, onTrigger }) {
                   style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
                   checked={accounts.length > 0 && accounts.every(a => a.isActive !== false)}
                   onChange={(e) => toggleAllAccounts(e.target.checked)}
-                  title="Toggle all accounts (saved locally)"
+                  title="Toggle all accounts (saved in local storage)"
                 />
               </th>
               <th>Email / Phone</th>
@@ -204,7 +203,7 @@ function AccountsManager({ scripts, onTrigger }) {
                         style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
                         checked={acc.isActive !== false}
                         onChange={(e) => updateAccount(idx, 'isActive', e.target.checked)}
-                        title="Include this account when running bots (saved locally)"
+                        title="Include this account when running bots (saved in local storage)"
                       />
                     </td>
                     <td>

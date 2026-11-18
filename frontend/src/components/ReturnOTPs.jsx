@@ -33,14 +33,14 @@ function ReturnOTPs({ scripts, onTrigger }) {
           const raw = localStorage.getItem('selected_accounts');
           if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+            if (parsed && typeof parsed === 'object') {
               localSelection = parsed;
             }
           }
         } catch (e) {}
         const merged = Array.isArray(data) ? data.map(a => ({
           ...a,
-          isActive: (localSelection && localSelection[a.username] !== undefined) ? localSelection[a.username] : (a.isActive !== false)
+          isActive: (localSelection && typeof localSelection[a.username] === 'boolean') ? localSelection[a.username] : true
         })) : [];
         setAccounts(merged);
       })
@@ -51,7 +51,13 @@ function ReturnOTPs({ scripts, onTrigger }) {
     fetchOtps();
     fetchAccounts();
     const interval = setInterval(fetchOtps, 5000);
-    return () => clearInterval(interval);
+    window.addEventListener('selected-accounts-updated', fetchAccounts);
+    window.addEventListener('storage', fetchAccounts);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('selected-accounts-updated', fetchAccounts);
+      window.removeEventListener('storage', fetchAccounts);
+    };
   }, []);
 
   const handleSyncAll = async () => {

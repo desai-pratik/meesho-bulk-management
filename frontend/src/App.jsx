@@ -113,26 +113,7 @@ function App() {
       .then(data => setFileCount(Array.isArray(data) ? data.length : 0))
       .catch(err => console.error("Error fetching files:", err));
 
-    fetch(`${BACKEND_URL}/api/accounts`)
-      .then(res => res.json())
-      .then(data => {
-        let localSelection = null;
-        try {
-          const raw = localStorage.getItem('selected_accounts');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
-              localSelection = parsed;
-            }
-          }
-        } catch (e) {}
-        const count = Array.isArray(data)
-          ? data.filter(a => ((localSelection && localSelection[a.username] !== undefined) ? localSelection[a.username] : (a.isActive !== false))).length
-          : 0;
-        setAccountCount(count);
-      })
-      .catch(err => console.error("Error fetching accounts:", err));
-
+    updateAccountCount();
     updateNotificationsCount();
 
     // Listen for logs
@@ -185,27 +166,81 @@ function App() {
       updateNotificationsCount();
     };
 
+    const handleAccountsChanged = () => {
+      updateAccountCount();
+    };
+
     socket.on('notification', handleSocketNotification);
     window.addEventListener('notifications-updated', handleNotificationsChanged);
+    window.addEventListener('selected-accounts-updated', handleAccountsChanged);
     window.addEventListener('storage', handleNotificationsChanged);
+    window.addEventListener('storage', handleAccountsChanged);
 
     return () => {
       socket.off('log');
       socket.off('processStatus');
       socket.off('notification', handleSocketNotification);
       window.removeEventListener('notifications-updated', handleNotificationsChanged);
+      window.removeEventListener('selected-accounts-updated', handleAccountsChanged);
       window.removeEventListener('storage', handleNotificationsChanged);
+      window.removeEventListener('storage', handleAccountsChanged);
     };
   }, [token]);
+
+  const updateAccountCount = () => {
+    fetch(`${BACKEND_URL}/api/accounts`)
+      .then(res => res.json())
+      .then(data => {
+        let localSelection = null;
+        try {
+          const raw = localStorage.getItem('selected_accounts');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              localSelection = parsed;
+            }
+          }
+        } catch (e) {}
+        const count = Array.isArray(data)
+          ? data.filter(a => ((localSelection && typeof localSelection[a.username] === 'boolean') ? localSelection[a.username] : true)).length
+          : 0;
+        setAccountCount(count);
+      })
+      .catch(err => console.error("Error fetching accounts:", err));
+  };
 
   const triggerScript = async (filename, action = 'start') => {
     try {
       const isStop = action === 'stop';
       const endpoint = isStop ? `/api/stop/${filename}` : `/api/run/${filename}`;
-      // Check if we passed a specific account
       let bodyData = undefined;
-      if (typeof action === 'object' && action.account) {
-        bodyData = JSON.stringify({ account: action.account });
+
+      if (!isStop) {
+        if (typeof action === 'object' && action.account) {
+          bodyData = JSON.stringify({ account: action.account });
+        } else {
+          // Read selected accounts from localStorage
+          let selectedList = null;
+          try {
+            const raw = localStorage.getItem('selected_accounts');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === 'object') {
+                selectedList = Object.keys(parsed).filter(k => parsed[k] === true);
+              }
+            }
+          } catch (e) {
+            console.error("Error reading selected_accounts from localStorage:", e);
+          }
+
+          if (selectedList !== null) {
+            if (selectedList.length === 0) {
+              alert("No accounts selected! Please enable at least one account in Meesho Accounts before running the bot.");
+              return;
+            }
+            bodyData = JSON.stringify({ selectedAccounts: selectedList });
+          }
+        }
       }
 
       const res = await fetch(`${BACKEND_URL}${endpoint}`, {

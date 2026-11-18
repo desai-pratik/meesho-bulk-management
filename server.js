@@ -676,7 +676,7 @@ app.post('/api/profile/update', async (req, res) => {
 
 // --- API ENDPOINTS ---
 
-// Accounts (Credentials in MongoDB, Selection stored locally)
+// Accounts
 app.get('/api/accounts', async (req, res) => {
     try {
         const { getAccounts } = require('./accounts_helper');
@@ -698,7 +698,6 @@ app.post('/api/accounts', async (req, res) => {
         const accountsColl = db.collection('accounts');
         await accountsColl.deleteMany({});
         if (accounts.length > 0) {
-            // Note: isActive is stored locally in selected_accounts.json, NOT in MongoDB!
             await accountsColl.insertMany(accounts.map(acc => ({
                 username: acc.username.trim(),
                 password: acc.password.trim(),
@@ -709,53 +708,7 @@ app.post('/api/accounts', async (req, res) => {
         // Clean up any lingering isActive in MongoDB
         await accountsColl.updateMany({ isActive: { $exists: true } }, { $unset: { isActive: "" } });
 
-        // Update local selection for these accounts
-        const { getLocalSelection, saveLocalSelection } = require('./accounts_helper');
-        const currentSelection = getLocalSelection();
-        accounts.forEach(acc => {
-            if (acc.username) {
-                const u = acc.username.trim();
-                if (acc.isActive !== undefined) {
-                    currentSelection[u] = acc.isActive !== false;
-                } else if (currentSelection[u] === undefined) {
-                    currentSelection[u] = true;
-                }
-            }
-        });
-        saveLocalSelection(currentSelection);
-
         res.json({ success: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Local Account Selection endpoints (stored locally, not in MongoDB)
-app.get('/api/local-account-selection', (req, res) => {
-    try {
-        const { getLocalSelection } = require('./accounts_helper');
-        res.json({ selection: getLocalSelection() });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-app.post('/api/local-account-selection', (req, res) => {
-    try {
-        const { selection, username, isSelected } = req.body;
-        const { getLocalSelection, saveLocalSelection } = require('./accounts_helper');
-        let current = getLocalSelection();
-
-        if (selection && typeof selection === 'object') {
-            current = { ...current, ...selection };
-        } else if (username) {
-            current[username] = Boolean(isSelected);
-        } else {
-            return res.status(400).json({ error: 'Invalid selection payload' });
-        }
-
-        saveLocalSelection(current);
-        res.json({ success: true, selection: current });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -1714,7 +1667,7 @@ app.get('/api/scripts', (req, res) => {
 
 app.post('/api/run/:scriptName', (req, res) => {
     const { scriptName } = req.params;
-    const { account } = req.body || {};
+    const { account, selectedAccounts } = req.body || {};
 
     if (!scriptName.startsWith('meesho_') || !scriptName.endsWith('.js')) {
         return res.status(400).json({ error: 'Invalid script name' });
@@ -1733,7 +1686,15 @@ app.post('/api/run/:scriptName', (req, res) => {
         const env = Object.assign({}, process.env);
         delete env.NODE_OPTIONS;
         if (account) {
-            env.TARGET_ACCOUNT = account;
+            env.TARGET_ACCOUNT = String(account).trim();
+        } else if (selectedAccounts !== undefined) {
+            if (Array.isArray(selectedAccounts)) {
+                env.TARGET_ACCOUNT = selectedAccounts.length > 0
+                    ? selectedAccounts.map(a => String(a).trim()).filter(Boolean).join(',')
+                    : '__NO_ACCOUNTS_SELECTED__';
+            } else if (typeof selectedAccounts === 'string' && selectedAccounts.trim()) {
+                env.TARGET_ACCOUNT = selectedAccounts.trim();
+            }
         }
 
         const startTime = Date.now();
