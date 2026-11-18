@@ -19,33 +19,12 @@ function handleShutdown(signal) {
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 
-let stealthChromium = null;
-try {
-    const { chromium } = require('playwright-extra');
-    const stealth = require('puppeteer-extra-plugin-stealth')();
-    // Disable outdated evasions that forge mismatched OS/UA/Sec-CH-UA/WebGL signatures flagged by Akamai WAF:
-    // - user-agent-override forces Windows UA on Linux TCP stack and injects Chrome 89 '" Not;A Brand";v="99"'
-    // - webgl.vendor forces macOS 'Intel Iris OpenGL Engine' on Linux/Windows
-    // - navigator.languages hardcodes ['en-US', 'en'] regardless of context locale
-    stealth.enabledEvasions.delete('user-agent-override');
-    stealth.enabledEvasions.delete('webgl.vendor');
-    stealth.enabledEvasions.delete('navigator.languages');
-    chromium.use(stealth);
-    stealthChromium = chromium;
-} catch (e) {
-    console.warn("[ScreencastHelper] Could not initialize playwright-extra stealth plugin:", e.message);
-}
-
-// Intercept require('playwright') to inject stealth mode, headed/headless settings, and screencast streaming
+// Intercept require('playwright') to inject headed/headless settings and screencast streaming
 Module.prototype.require = function (id) {
     if (id === 'playwright') {
         const playwright = originalRequire.apply(this, arguments);
-        const targetChromium = stealthChromium || playwright.chromium;
-        wrapPlaywright(targetChromium);
-        return {
-            ...playwright,
-            chromium: targetChromium
-        };
+        wrapPlaywright(playwright.chromium);
+        return playwright;
     }
     return originalRequire.apply(this, arguments);
 };
@@ -87,7 +66,7 @@ function wrapPlaywright(chromiumLauncher) {
             }
 
             // Determine headless mode:
-            // Running headed (headless: false) inside Xvfb bypasses Akamai WAF headless detection.
+            // Running headed (headless: false) inside Xvfb on Linux or headed off-screen on Windows
             const isHeadless = process.env.HEADLESS === 'true' || (process.platform === 'linux' && !hasLinuxDisplay);
             if (isHeadless) {
                 options.headless = true;
@@ -99,14 +78,13 @@ function wrapPlaywright(chromiumLauncher) {
                 options.args = [];
             }
             
-            // Essential container & Akamai WAF bypass flags for Linux / Docker / Render
+            // Essential container flags for Linux / Docker / Render & bot stealth
             const essentialArgs = [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--enable-features=CDPScreenshotNewSurface',
                 '--disable-blink-features=AutomationControlled',
-                '--disable-http2',
                 '--disable-infobars',
                 '--lang=en-US,en'
             ];
@@ -124,7 +102,7 @@ function wrapPlaywright(chromiumLauncher) {
                 options.ignoreDefaultArgs.push('--enable-automation');
             }
 
-            // Support optional proxy configuration via environment variables (e.g. for Indian residential proxy on cloud hosts)
+            // Support optional proxy configuration via environment variables
             if (process.env.PROXY_SERVER && !options.proxy) {
                 options.proxy = {
                     server: process.env.PROXY_SERVER.trim()
@@ -137,7 +115,7 @@ function wrapPlaywright(chromiumLauncher) {
             if (!options.headless) {
                 options.args = options.args.filter(arg => arg !== '--start-maximized');
                 if (process.platform === 'linux') {
-                    // Inside virtual Xvfb display, keep normal on-screen coordinates so WAF geometry checks pass
+                    // Inside virtual Xvfb display, keep normal on-screen coordinates
                     options.args.push('--window-position=0,0');
                     options.args.push('--window-size=1920,1080');
                 } else {
@@ -147,30 +125,17 @@ function wrapPlaywright(chromiumLauncher) {
                 }
             }
 
-            // Prefer official Google Chrome channel if available for real TLS / JA3 / JA4 fingerprint
             let browser = null;
-            const originalChannel = options.channel;
-            if (!originalChannel && process.env.USE_CHROME_CHANNEL !== 'false') {
-                try {
-                    options.channel = 'chrome';
+            try {
+                browser = await originalLaunch.call(chromiumLauncher, options);
+            } catch (e) {
+                // If headed launch failed (e.g. X server issue), fall back to headless so bot still runs
+                if (!options.headless) {
+                    console.warn('[ScreencastHelper] Headed launch failed, retrying in headless mode:', e.message);
+                    options.headless = true;
                     browser = await originalLaunch.call(chromiumLauncher, options);
-                } catch (e) {
-                    delete options.channel;
-                }
-            }
-
-            if (!browser) {
-                try {
-                    browser = await originalLaunch.call(chromiumLauncher, options);
-                } catch (e) {
-                    // If headed launch failed (e.g. X server issue), fall back to headless so bot still runs
-                    if (!options.headless) {
-                        console.warn('[ScreencastHelper] Headed launch failed, retrying in headless mode:', e.message);
-                        options.headless = true;
-                        browser = await originalLaunch.call(chromiumLauncher, options);
-                    } else {
-                        throw e;
-                    }
+                } else {
+                    throw e;
                 }
             }
             currentBrowser = browser;
@@ -194,14 +159,7 @@ function wrapPlaywright(chromiumLauncher) {
                     throw new Error("Target page, context or browser has been closed");
                 }
                 const sanitizedOptions = { ...contextOptions };
-                // Remove hardcoded/mismatched userAgent so native browser UA, TCP OS stack, and Client-Hints stay 100% consistent
-                delete sanitizedOptions.userAgent;
-                delete sanitizedOptions.locale;
                 if (!sanitizedOptions.timezoneId) sanitizedOptions.timezoneId = 'Asia/Kolkata';
-                sanitizedOptions.extraHTTPHeaders = {
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    ...(sanitizedOptions.extraHTTPHeaders || {})
-                };
 
                 const context = await originalNewContext.call(browser, sanitizedOptions);
                 
@@ -211,7 +169,6 @@ function wrapPlaywright(chromiumLauncher) {
                         throw new Error("Target page, context or browser has been closed");
                     }
                     const page = await originalNewPage.apply(context, arguments);
-                    enhancePageForWAF(page);
                     setupScreencast(page);
                     return page;
                 };
@@ -224,7 +181,6 @@ function wrapPlaywright(chromiumLauncher) {
                     throw new Error("Target page, context or browser has been closed");
                 }
                 const page = await originalNewPage.apply(browser, arguments);
-                enhancePageForWAF(page);
                 setupScreencast(page);
                 return page;
             };
@@ -232,65 +188,6 @@ function wrapPlaywright(chromiumLauncher) {
             return browser;
         };
     }
-}
-
-function enhancePageForWAF(page) {
-    if (!page || page._wafEnhanced) return;
-    page._wafEnhanced = true;
-
-    const originalGoto = page.goto;
-    page.goto = async function (url, options = {}) {
-        const isMeeshoLogin = typeof url === 'string' && url.includes('supplier.meesho.com/panel/v3/new/root/login');
-
-        if (isMeeshoLogin && !page._meeshoWarmupDone) {
-            page._meeshoWarmupDone = true;
-            try {
-                // Warm up Akamai cookies (ak_bmsc / bm_sz / _abck) on the public root domain first
-                await originalGoto.call(page, 'https://supplier.meesho.com/', {
-                    waitUntil: 'domcontentloaded',
-                    timeout: 20000
-                });
-                await page.waitForTimeout(1500);
-                try {
-                    await page.mouse.move(250 + Math.floor(Math.random() * 150), 220 + Math.floor(Math.random() * 150));
-                } catch (e) {}
-            } catch (e) {
-                // Continue to target URL even if warm-up times out
-            }
-        }
-
-        const gotoOpts = isMeeshoLogin
-            ? { referer: 'https://supplier.meesho.com/', ...options }
-            : options;
-
-        let response = await originalGoto.call(page, url, gotoOpts);
-
-        if (isMeeshoLogin) {
-            try {
-                const title = await page.title().catch(() => '');
-                const bodyText = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
-                if (title.includes('Access Denied') || bodyText.includes("You don't have permission to access")) {
-                    console.warn('[ScreencastHelper] Akamai Access Denied detected on initial login navigation. Retrying via supplier homepage...');
-                    await page.context().clearCookies().catch(() => {});
-                    await page.waitForTimeout(2000);
-                    await originalGoto.call(page, 'https://supplier.meesho.com/', {
-                        waitUntil: 'domcontentloaded',
-                        timeout: 20000
-                    }).catch(() => {});
-                    await page.waitForTimeout(2000);
-                    response = await originalGoto.call(page, url, gotoOpts);
-
-                    const retryTitle = await page.title().catch(() => '');
-                    const retryBody = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
-                    if (retryTitle.includes('Access Denied') || retryBody.includes("You don't have permission to access")) {
-                        console.error('[ScreencastHelper] Akamai WAF blocked access from this server IP (Geo/Datacenter IP block). Set PROXY_SERVER env var to an Indian proxy if running on a US/foreign cloud host.');
-                    }
-                }
-            } catch (e) {}
-        }
-
-        return response;
-    };
 }
 
 async function setupScreencast(page) {
@@ -326,10 +223,12 @@ async function setupScreencast(page) {
             }
         });
     } catch (e) {
+        console.error("Failed to start CDP screencast, falling back to screenshot polling:", e.message);
+        
         // Fallback: 1000ms screenshot polling in case CDP fails
         let isCapturing = false;
         const interval = setInterval(async () => {
-            if (page.isClosed() || isShuttingDown) {
+            if (page.isClosed()) {
                 clearInterval(interval);
                 return;
             }

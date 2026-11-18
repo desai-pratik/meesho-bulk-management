@@ -67,17 +67,27 @@ async function fetchReturnOTPs(browser, account) {
 
     try {
         console.log(`[${username}] Navigating to Meesho...`);
-        await page.goto(LOGIN_URL, { timeout: 3000 });
+        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
 
-        const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        await emailInput.waitFor({ state: 'visible', timeout: 3000 });
+        const emailInput = page.locator('input[name="emailOrPhone"]')
+            .or(page.getByRole('textbox', { name: /email/i }))
+            .or(page.locator('input[type="text"]').first());
+        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
 
         console.log(`[${username}] Logging in...`);
-        await emailInput.fill(username);
-        await page.getByRole('textbox', { name: 'Password' }).fill(password);
-        await page.getByRole('button', { name: 'Log in', exact: true }).click();
+        await emailInput.first().fill(username);
 
-        try { await page.waitForLoadState('networkidle', { timeout: 1000 }); } catch (e) { }
+        const passwordInput = page.locator('input[name="password"]')
+            .or(page.getByRole('textbox', { name: /password/i }))
+            .or(page.locator('input[type="password"]').first());
+        await passwordInput.first().fill(password);
+
+        const loginBtn = page.getByRole('button', { name: /log\s*in/i })
+            .or(page.locator('button[type="submit"]'))
+            .or(page.locator('button:has-text("Log in")'));
+        await loginBtn.first().click();
+
+        try { await page.waitForLoadState('networkidle', { timeout: 5000 }); } catch (e) { }
         await page.waitForTimeout(300);
 
         // Close any popups that might intercept clicks

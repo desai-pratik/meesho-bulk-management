@@ -308,13 +308,25 @@ async function processAccount(browser, account, uploadFiles) {
     try {
         // 1. Login
         console.log(`[${username}] Navigating to login...`);
-        await page.goto(LOGIN_URL, { timeout: 30000 });
+        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
 
-        await page.getByRole('textbox', { name: 'Email Id or mobile number' }).fill(username);
-        await page.getByRole('textbox', { name: 'Password' }).fill(password);
+        const emailInput = page.locator('input[name="emailOrPhone"]')
+            .or(page.getByRole('textbox', { name: /email/i }))
+            .or(page.locator('input[type="text"]').first());
+        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
 
         console.log(`[${username}] Logging in...`);
-        await page.getByRole('button', { name: 'Log in', exact: true }).click();
+        await emailInput.first().fill(username);
+
+        const passwordInput = page.locator('input[name="password"]')
+            .or(page.getByRole('textbox', { name: /password/i }))
+            .or(page.locator('input[type="password"]').first());
+        await passwordInput.first().fill(password);
+
+        const loginBtn = page.getByRole('button', { name: /log\s*in/i })
+            .or(page.locator('button[type="submit"]'))
+            .or(page.locator('button:has-text("Log in")'));
+        await loginBtn.first().click();
 
         // Wait for Dashboard
         try {

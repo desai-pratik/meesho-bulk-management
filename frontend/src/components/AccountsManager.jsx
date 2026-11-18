@@ -10,10 +10,20 @@ function AccountsManager({ scripts, onTrigger }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [syncStatus, setSyncStatus] = useState('');
 
+  const syncLocalSelectionToServer = (selectionMap) => {
+    try {
+      fetch(`${BACKEND_URL}/api/local-account-selection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selection: selectionMap })
+      }).catch(() => {});
+    } catch (e) {}
+  };
+
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
-      .then(data => {
+      .then(async data => {
         let localSelection = null;
         try {
           const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -21,6 +31,13 @@ function AccountsManager({ scripts, onTrigger }) {
             const parsed = JSON.parse(raw);
             if (parsed && typeof parsed === 'object') {
               localSelection = parsed;
+            }
+          } else {
+            const selRes = await fetch(`${BACKEND_URL}/api/local-account-selection`);
+            const selJson = await selRes.json();
+            if (selJson && selJson.selection && Object.keys(selJson.selection).length > 0) {
+              localSelection = selJson.selection;
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localSelection));
             }
           }
         } catch (e) {
@@ -40,11 +57,12 @@ function AccountsManager({ scripts, onTrigger }) {
         setAccounts(merged);
         setLoading(false);
 
-        // Keep localStorage updated with current selection map
+        // Keep localStorage and server updated with current selection map
         const initialMap = {};
         merged.forEach(a => { if (a.username) initialMap[a.username] = a.isActive !== false; });
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialMap));
+          syncLocalSelectionToServer(initialMap);
           window.dispatchEvent(new Event('selected-accounts-updated'));
         } catch (e) {}
       })
@@ -68,6 +86,7 @@ function AccountsManager({ scripts, onTrigger }) {
       newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+        syncLocalSelectionToServer(selectionMap);
         window.dispatchEvent(new Event('selected-accounts-updated'));
       } catch (e) {}
       setSyncStatus('Selection saved in local storage');
@@ -83,6 +102,7 @@ function AccountsManager({ scripts, onTrigger }) {
     newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = checked; });
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+      syncLocalSelectionToServer(selectionMap);
       window.dispatchEvent(new Event('selected-accounts-updated'));
     } catch (e) {}
     setSyncStatus('Selection saved in local storage');
@@ -99,6 +119,7 @@ function AccountsManager({ scripts, onTrigger }) {
       newAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+        syncLocalSelectionToServer(selectionMap);
         window.dispatchEvent(new Event('selected-accounts-updated'));
       } catch (e) {}
     }
@@ -118,6 +139,7 @@ function AccountsManager({ scripts, onTrigger }) {
         validAccounts.forEach(a => { if (a.username) selectionMap[a.username] = a.isActive !== false; });
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
+          syncLocalSelectionToServer(selectionMap);
           window.dispatchEvent(new Event('selected-accounts-updated'));
         } catch (e) {}
         alert("Accounts saved successfully!");

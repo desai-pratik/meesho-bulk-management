@@ -416,14 +416,19 @@ async function processAccount(browser, account, groups, defaults) {
     const results = [];
 
     try {
-        await page.goto(LOGIN_URL, { timeout: 30000 });
+        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
 
-        const emailInput = page.getByRole('textbox', { name: 'Email Id or mobile number' });
-        await emailInput.waitFor({ state: 'visible', timeout: 15000 });
+        const emailInput = page.locator('input[name="emailOrPhone"]')
+            .or(page.getByRole('textbox', { name: /email/i }))
+            .or(page.locator('input[type="text"]').first());
+        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
 
         console.log(`  > Logging in...`);
-        await emailInput.fill(username);
-        await page.getByRole('textbox', { name: 'Password' }).fill(password);
+        await emailInput.first().fill(username);
+        const passwordInput = page.locator('input[name="password"]')
+            .or(page.getByRole('textbox', { name: /password/i }))
+            .or(page.locator('input[type="password"]').first());
+        await passwordInput.first().fill(password);
         await page.getByRole('button', { name: 'Log in', exact: true }).click();
         try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch(e) {}
         

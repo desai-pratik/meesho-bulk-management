@@ -190,19 +190,29 @@ function App() {
   const updateAccountCount = () => {
     fetch(`${BACKEND_URL}/api/accounts`)
       .then(res => res.json())
-      .then(data => {
+      .then(async data => {
         let localSelection = null;
         try {
           const raw = localStorage.getItem('selected_accounts');
           if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object') {
-              localSelection = parsed;
+            localSelection = JSON.parse(raw);
+          } else {
+            const selRes = await fetch(`${BACKEND_URL}/api/local-account-selection`);
+            const selJson = await selRes.json();
+            if (selJson && selJson.selection && Object.keys(selJson.selection).length > 0) {
+              localSelection = selJson.selection;
+              localStorage.setItem('selected_accounts', JSON.stringify(localSelection));
             }
           }
         } catch (e) {}
+
         const count = Array.isArray(data)
-          ? data.filter(a => ((localSelection && typeof localSelection[a.username] === 'boolean') ? localSelection[a.username] : true)).length
+          ? data.filter(a => {
+              if (!localSelection) return true;
+              if (Array.isArray(localSelection)) return localSelection.includes(a.username);
+              if (typeof localSelection[a.username] === 'boolean') return localSelection[a.username];
+              return true;
+            }).length
           : 0;
         setAccountCount(count);
       })
@@ -220,12 +230,25 @@ function App() {
           bodyData = JSON.stringify({ account: action.account });
         } else {
           // Read selected accounts from localStorage
-          let selectedList = null;
+          let selectedList = [];
           try {
-            const raw = localStorage.getItem('selected_accounts');
+            let raw = localStorage.getItem('selected_accounts');
+            if (!raw) {
+              try {
+                const selRes = await fetch(`${BACKEND_URL}/api/local-account-selection`);
+                const selJson = await selRes.json();
+                if (selJson && selJson.selection) {
+                  raw = JSON.stringify(selJson.selection);
+                  localStorage.setItem('selected_accounts', raw);
+                }
+              } catch (e) {}
+            }
+
             if (raw) {
               const parsed = JSON.parse(raw);
-              if (parsed && typeof parsed === 'object') {
+              if (Array.isArray(parsed)) {
+                selectedList = parsed.filter(Boolean);
+              } else if (parsed && typeof parsed === 'object') {
                 selectedList = Object.keys(parsed).filter(k => parsed[k] === true);
               }
             }
@@ -233,20 +256,18 @@ function App() {
             console.error("Error reading selected_accounts from localStorage:", e);
           }
 
-          if (selectedList !== null) {
-            if (selectedList.length === 0) {
-              alert("No accounts selected! Please enable at least one account in Meesho Accounts before running the bot.");
-              return;
-            }
-            bodyData = JSON.stringify({ selectedAccounts: selectedList });
+          if (selectedList.length === 0) {
+            alert("No accounts selected! Please enable at least one account in Meesho Accounts before running the bot.");
+            return;
           }
+          bodyData = JSON.stringify({ selectedAccounts: selectedList });
         }
       }
 
       const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
-        headers: bodyData ? { 'Content-Type': 'application/json' } : undefined,
-        body: bodyData
+        headers: { 'Content-Type': 'application/json' },
+        body: bodyData || JSON.stringify({})
       });
       const data = await res.json();
       if (data.error) {

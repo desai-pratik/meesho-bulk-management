@@ -714,6 +714,29 @@ app.post('/api/accounts', async (req, res) => {
     }
 });
 
+// Local Account Selection endpoints (stored locally on disk in selected_accounts.json, not in MongoDB)
+app.get('/api/local-account-selection', (req, res) => {
+    try {
+        const { getLocalSelection } = require('./accounts_helper');
+        const selection = getLocalSelection();
+        res.json({ selection: selection || {} });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/local-account-selection', (req, res) => {
+    try {
+        const { saveLocalSelection } = require('./accounts_helper');
+        const { selection, selectedAccounts } = req.body || {};
+        const dataToSave = selection !== undefined ? selection : (selectedAccounts !== undefined ? selectedAccounts : {});
+        saveLocalSelection(dataToSave);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Inventory Price Updates
 app.get('/api/inventory-updates', async (req, res) => {
     try {
@@ -1669,6 +1692,8 @@ app.post('/api/run/:scriptName', (req, res) => {
     const { scriptName } = req.params;
     const { account, selectedAccounts } = req.body || {};
 
+    console.log(`[POST /api/run/${scriptName}] Incoming body:`, JSON.stringify(req.body));
+
     if (!scriptName.startsWith('meesho_') || !scriptName.endsWith('.js')) {
         return res.status(400).json({ error: 'Invalid script name' });
     }
@@ -1683,18 +1708,52 @@ app.post('/api/run/:scriptName', (req, res) => {
     }
 
     try {
+        const { getLocalSelection, saveLocalSelection } = require('./accounts_helper');
         const env = Object.assign({}, process.env);
         delete env.NODE_OPTIONS;
+
+        let targetAccounts = null;
+
         if (account) {
-            env.TARGET_ACCOUNT = String(account).trim();
+            targetAccounts = [String(account).trim()];
         } else if (selectedAccounts !== undefined) {
             if (Array.isArray(selectedAccounts)) {
-                env.TARGET_ACCOUNT = selectedAccounts.length > 0
-                    ? selectedAccounts.map(a => String(a).trim()).filter(Boolean).join(',')
-                    : '__NO_ACCOUNTS_SELECTED__';
+                targetAccounts = selectedAccounts.map(a => String(a).trim()).filter(Boolean);
+            } else if (typeof selectedAccounts === 'object' && selectedAccounts !== null) {
+                targetAccounts = Object.keys(selectedAccounts).filter(k => selectedAccounts[k] === true);
             } else if (typeof selectedAccounts === 'string' && selectedAccounts.trim()) {
-                env.TARGET_ACCOUNT = selectedAccounts.trim();
+                targetAccounts = selectedAccounts.split(',').map(a => a.trim()).filter(Boolean);
             }
+        }
+
+        if (targetAccounts !== null) {
+            if (targetAccounts.length === 0) {
+                env.TARGET_ACCOUNT = '__NO_ACCOUNTS_SELECTED__';
+            } else {
+                env.TARGET_ACCOUNT = targetAccounts.join(',');
+            }
+            // Persist the selection mapping to local workspace file
+            const syncMap = {};
+            targetAccounts.forEach(u => { syncMap[u] = true; });
+            saveLocalSelection(syncMap);
+        } else {
+            // Fallback: read selected_accounts.json from disk
+            const diskSelection = getLocalSelection();
+            if (diskSelection) {
+                let allowed = [];
+                if (Array.isArray(diskSelection)) {
+                    allowed = diskSelection.map(a => String(a).trim()).filter(Boolean);
+                } else if (typeof diskSelection === 'object') {
+                    allowed = Object.keys(diskSelection).filter(k => diskSelection[k] === true);
+                }
+                env.TARGET_ACCOUNT = allowed.length > 0 ? allowed.join(',') : '__NO_ACCOUNTS_SELECTED__';
+            }
+        }
+
+        console.log(`[Run Script] Starting ${scriptName} with TARGET_ACCOUNT="${env.TARGET_ACCOUNT || 'ALL'}"`);
+
+        if (env.TARGET_ACCOUNT === '__NO_ACCOUNTS_SELECTED__') {
+            return res.status(400).json({ error: 'No accounts selected! Please enable at least one account in Meesho Accounts before running the bot.' });
         }
 
         const startTime = Date.now();
