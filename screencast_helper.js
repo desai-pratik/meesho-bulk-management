@@ -133,14 +133,14 @@ function wrapPlaywright(chromiumLauncher) {
             // Wrap browser context and page creations to inject screencasting
             const originalClose = browser.close;
             browser.close = async function () {
-                isShuttingDown = true;
-                currentBrowser = null;
+                if (currentBrowser === browser) {
+                    currentBrowser = null;
+                }
                 try {
                     await originalClose.apply(browser, arguments);
                 } catch (e) {
                     console.error("Error closing browser:", e.message);
                 }
-                setTimeout(() => process.exit(0), 200);
             };
 
             const originalNewContext = browser.newContext;

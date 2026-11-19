@@ -339,6 +339,11 @@ async function processAccount(browser, account, uploadFiles) {
 
         // Loop through ALL files
         for (let i = 0; i < uploadFiles.length; i++) {
+            if (!browser || !browser.isConnected() || !page || page.isClosed()) {
+                console.error(`[${username}] ⚠️ Browser or target page is closed. Aborting remaining files.`);
+                globalError = "Target page, context or browser has been closed";
+                break;
+            }
             const currentFile = uploadFiles[i];
             const fileName = path.basename(currentFile);
             console.log(`\n[${username}] Processing File ${i + 1}/${uploadFiles.length}: ${fileName}`);
@@ -488,9 +493,21 @@ async function processAccount(browser, account, uploadFiles) {
                 fileResults.push({ file: fileName, status: 'Failed', reason: e.message });
                 // Attempt to take a screenshot of the failure
                 try {
-                    await logBotError(path.basename(__filename), username, `Failed to upload file ${fileName}: ${e.message}`, typeof page !== 'undefined' ? page : null, null, fileName);
+                    const validPage = (typeof page !== 'undefined' && page && !page.isClosed()) ? page : null;
+                    await logBotError(path.basename(__filename), username, `Failed to upload file ${fileName}: ${e.message}`, validPage, null, fileName);
                 } catch (err) {
                     console.log("error logging failure", err);
+                }
+
+                const isTargetClosed = e.message && (
+                    e.message.includes('Target page, context or browser has been closed') ||
+                    e.message.includes('Target closed') ||
+                    e.message.includes('browser has been closed')
+                );
+                if (isTargetClosed || !browser || !browser.isConnected() || !page || page.isClosed()) {
+                    console.error(`[${username}] ⚠️ Browser/page closed unexpectedly. Aborting remaining files for ${username}.`);
+                    globalError = e.message;
+                    break;
                 }
             }
         }
@@ -499,7 +516,8 @@ async function processAccount(browser, account, uploadFiles) {
         console.error(`Error with account ${username}:`, e.message);
         globalError = e.message;
         try {
-            await logBotError(path.basename(__filename), username, `Account error: ${e.message}`, typeof page !== 'undefined' ? page : null);
+            const validPage = (typeof page !== 'undefined' && page && !page.isClosed()) ? page : null;
+            await logBotError(path.basename(__filename), username, `Account error: ${e.message}`, validPage);
         } catch (err) {
             console.log("error logging session failure", err);
         }
@@ -523,26 +541,35 @@ async function runBot() {
     console.log(`Found ${uploadFiles.length} files to upload.`);
     console.log(`Loaded ${accounts.length} accounts.`);
 
-    const browser = await chromium.launch({
-        headless: process.env.HEADLESS === 'true' ? true : false,
-        args: [
-            '--start-maximized',
-            '--disable-blink-features=AutomationControlled', // Disable bot detection feature
-            '--disable-infobars',
-            '--no-sandbox',
-            '--disable-setuid-sandbox'
-        ],
-        ignoreDefaultArgs: ['--enable-automation'] // Hide "Chrome is being controlled by automated test software" bar
-    });
+    const launchBrowser = async () => {
+        return await chromium.launch({
+            headless: process.env.HEADLESS === 'true' ? true : false,
+            args: [
+                '--start-maximized',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-infobars',
+                '--no-sandbox',
+                '--disable-setuid-sandbox'
+            ],
+            ignoreDefaultArgs: ['--enable-automation']
+        });
+    };
+
+    let browser = await launchBrowser();
 
     const results = [];
 
     // Batch Processing
-    const BATCH_SIZE = 1; // Keep at 2 for stability
+    const BATCH_SIZE = 1;
     for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
         if (!browser || !browser.isConnected()) {
-            console.log("Browser closed or disconnected. Aborting remaining batches.");
-            break;
+            console.log("Browser disconnected/closed. Launching fresh browser instance...");
+            try {
+                browser = await launchBrowser();
+            } catch (err) {
+                console.error("Failed to relaunch browser:", err.message);
+                break;
+            }
         }
         const batch = accounts.slice(i, i + BATCH_SIZE);
         console.log(`\n=== Processing Batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} accounts) ===`);
@@ -550,9 +577,26 @@ async function runBot() {
         const batchResults = await Promise.all(batch.map(account => asyncLocalStorage.run(account.username, () => processAccount(browser, account, uploadFiles))));
         results.push(...batchResults);
 
-        console.log("Batch complete. Waiting 5 seconds...");
-        await new Promise(r => setTimeout(r, 5000));
+        if (i + BATCH_SIZE < accounts.length) {
+            console.log("Recycling browser session for next batch...");
+            try {
+                if (browser && browser.isConnected()) {
+                    await browser.close().catch(() => {});
+                }
+            } catch (e) { }
+            browser = null;
+
+            console.log("Batch complete. Waiting 8-12 seconds to prevent rate-limiting...");
+            const delay = Math.floor(Math.random() * (12000 - 8000 + 1)) + 8000;
+            await new Promise(r => setTimeout(r, delay));
+        }
     }
+
+    try {
+        if (browser && browser.isConnected()) {
+            await browser.close().catch(() => {});
+        }
+    } catch (e) { }
 
     console.log("\nAll accounts processed.");
 
