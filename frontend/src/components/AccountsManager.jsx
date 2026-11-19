@@ -17,8 +17,8 @@ function AccountsManager({ scripts, onTrigger }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selection: selectionMap })
-      }).catch(() => {});
-    } catch (e) {}
+      }).catch(() => { });
+    } catch (e) { }
   };
 
   useEffect(() => {
@@ -65,7 +65,7 @@ function AccountsManager({ scripts, onTrigger }) {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(initialMap));
           syncLocalSelectionToServer(initialMap);
           window.dispatchEvent(new Event('selected-accounts-updated'));
-        } catch (e) {}
+        } catch (e) { }
       })
       .catch(err => {
         console.error(err);
@@ -89,7 +89,7 @@ function AccountsManager({ scripts, onTrigger }) {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
         syncLocalSelectionToServer(selectionMap);
         window.dispatchEvent(new Event('selected-accounts-updated'));
-      } catch (e) {}
+      } catch (e) { }
       setSyncStatus('Selection saved in local storage');
       setTimeout(() => setSyncStatus(''), 2500);
     }
@@ -105,7 +105,7 @@ function AccountsManager({ scripts, onTrigger }) {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
       syncLocalSelectionToServer(selectionMap);
       window.dispatchEvent(new Event('selected-accounts-updated'));
-    } catch (e) {}
+    } catch (e) { }
     setSyncStatus('Selection saved in local storage');
     setTimeout(() => setSyncStatus(''), 2500);
   };
@@ -122,7 +122,7 @@ function AccountsManager({ scripts, onTrigger }) {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
         syncLocalSelectionToServer(selectionMap);
         window.dispatchEvent(new Event('selected-accounts-updated'));
-      } catch (e) {}
+      } catch (e) { }
     }
   };
 
@@ -142,7 +142,7 @@ function AccountsManager({ scripts, onTrigger }) {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(selectionMap));
           syncLocalSelectionToServer(selectionMap);
           window.dispatchEvent(new Event('selected-accounts-updated'));
-        } catch (e) {}
+        } catch (e) { }
         alert("Accounts saved successfully!");
       }
     } catch (e) {
@@ -247,139 +247,141 @@ function AccountsManager({ scripts, onTrigger }) {
         <table className="accounts-table" style={{ marginTop: 0 }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-dark)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             <tr>
-              <th style={{ width: '65px', textAlign: 'center', userSelect: 'none' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                  <input
-                    type="checkbox"
-                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                    checked={accounts.length > 0 && accounts.every(a => a.isActive !== false)}
-                    onChange={(e) => toggleAllAccounts(e.target.checked)}
-                    title="Toggle all accounts (saved in local storage)"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleSort('isActive')}
-                    title={
-                      sortConfig.key === 'isActive'
-                        ? (sortConfig.direction === 'asc' ? 'Sorted: Selected first (click for Unselected first)' : 'Sorted: Unselected first (click to reset)')
-                        : 'Sort by selection (Selected first)'
-                    }
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '3px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: '4px',
-                      color: sortConfig.key === 'isActive' ? 'var(--primary)' : 'var(--text-muted)'
-                    }}
-                  >
-                    {renderSortIcon('isActive')}
-                  </button>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('username')}
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                title="Click to sort by Email / Phone"
-              >
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Email / Phone</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', color: sortConfig.key === 'username' ? 'var(--primary)' : 'var(--text-muted)' }}>
-                    {renderSortIcon('username')}
-                  </span>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('name')}
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                title="Click to sort by Company Name"
-              >
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Company Name (Optional)</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', color: sortConfig.key === 'name' ? 'var(--primary)' : 'var(--text-muted)' }}>
-                    {renderSortIcon('name')}
-                  </span>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('password')}
-                style={{ cursor: 'pointer', userSelect: 'none' }}
-                title="Click to sort by Password"
-              >
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Password</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', color: sortConfig.key === 'password' ? 'var(--primary)' : 'var(--text-muted)' }}>
-                    {renderSortIcon('password')}
-                  </span>
-                </div>
-              </th>
-              <th style={{ width: '50px', textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {processedAccounts.map((acc) => {
-              const idx = acc.originalIndex;
-              return (
-                <tr key={idx}>
-                  <td style={{ textAlign: 'center' }}>
+                <th style={{ width: '65px', textAlign: 'center', userSelect: 'none' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                     <input
                       type="checkbox"
                       style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                      checked={acc.isActive !== false}
-                      onChange={(e) => updateAccount(idx, 'isActive', e.target.checked)}
-                      title="Include this account when running bots (saved in local storage)"
+                      checked={accounts.length > 0 && accounts.every(a => a.isActive !== false)}
+                      onChange={(e) => toggleAllAccounts(e.target.checked)}
+                      title="Toggle all accounts (saved in local storage)"
                     />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      value={acc.username}
-                      onChange={(e) => updateAccount(idx, 'username', e.target.value)}
-                      placeholder="email@example.com"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      value={acc.name || ''}
-                      onChange={(e) => updateAccount(idx, 'name', e.target.value)}
-                      placeholder="e.g. SHREEJI NEW"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="password"
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      value={acc.password}
-                      onChange={(e) => updateAccount(idx, 'password', e.target.value)}
-                      placeholder="••••••••"
-                    />
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
                     <button
-                      className="btn btn-danger"
-                      style={{ padding: '0.5rem', display: 'inline-flex' }}
-                      onClick={() => removeAccount(idx)}
-                      title="Delete Account"
+                      type="button"
+                      onClick={() => handleSort('isActive')}
+                      title={
+                        sortConfig.key === 'isActive'
+                          ? (sortConfig.direction === 'asc' ? 'Sorted: Selected first (click for Unselected first)' : 'Sorted: Unselected first (click to reset)')
+                          : 'Sort by selection (Selected first)'
+                      }
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '3px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        borderRadius: '4px',
+                        color: sortConfig.key === 'isActive' ? 'var(--primary)' : 'var(--text-muted)'
+                      }}
                     >
-                      <Trash2 size={16} />
+                      {renderSortIcon('isActive')}
                     </button>
-                  </td>
-                </tr>
-              );
-            })}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('username')}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to sort by Email / Phone"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Email / Phone</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', color: sortConfig.key === 'username' ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {renderSortIcon('username')}
+                    </span>
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('name')}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to sort by Company Name"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Company Name (Optional)</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', color: sortConfig.key === 'name' ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {renderSortIcon('name')}
+                    </span>
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('password')}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  title="Click to sort by Password"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Password</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', color: sortConfig.key === 'password' ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {renderSortIcon('password')}
+                    </span>
+                  </div>
+                </th>
+                <th style={{ width: '50px', textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+              {
+                processedAccounts.map((acc) => {
+                  const idx = acc.originalIndex;
+                  return (
+                    <tr key={idx}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                          checked={acc.isActive !== false}
+                          onChange={(e) => updateAccount(idx, 'isActive', e.target.checked)}
+                          title="Include this account when running bots (saved in local storage)"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="input-field"
+                          style={{ width: '100%' }}
+                          value={acc.username}
+                          onChange={(e) => updateAccount(idx, 'username', e.target.value)}
+                          placeholder="email@example.com"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="input-field"
+                          style={{ width: '100%' }}
+                          value={acc.name || ''}
+                          onChange={(e) => updateAccount(idx, 'name', e.target.value)}
+                          placeholder="e.g. SHREEJI NEW"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="password"
+                          className="input-field"
+                          style={{ width: '100%' }}
+                          value={acc.password}
+                          onChange={(e) => updateAccount(idx, 'password', e.target.value)}
+                          placeholder="••••••••"
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          className="btn btn-danger"
+                          style={{ padding: '0.5rem', display: 'inline-flex' }}
+                          onClick={() => removeAccount(idx)}
+                          title="Delete Account"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              }
             {processedAccounts.length === 0 && (
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-                  {accounts.length === 0 ? "No accounts found. Add one to get started." : "No accounts match your search."}
-                </td>
+                  <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                    {accounts.length === 0 ? "No accounts found. Add one to get started." : "No accounts match your search."}
+                  </td>
               </tr>
             )}
           </tbody>
