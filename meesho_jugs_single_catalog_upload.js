@@ -625,4 +625,11 @@ async function runBot() {
     console.log("Done.");
 }
 
-runBot();
+runBot().then(async () => {
+    try { const { closeDB } = require('./db'); await closeDB(); } catch (e) {}
+    process.exit(0);
+}).catch(async (err) => {
+    console.error("Bot execution failed:", err);
+    try { const { closeDB } = require('./db'); await closeDB(); } catch (e) {}
+    process.exit(1);
+});

@@ -160,4 +160,11 @@ async function runFetcher() {
     await browser.close();
 }
 
-runFetcher().catch(e => console.error(e));
+runFetcher().then(async () => {
+    try { const { closeDB } = require('./db'); await closeDB(); } catch (e) {}
+    process.exit(0);
+}).catch(async (err) => {
+    console.error("Fetcher execution failed:", err);
+    try { const { closeDB } = require('./db'); await closeDB(); } catch (e) {}
+    process.exit(1);
+});

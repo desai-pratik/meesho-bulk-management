@@ -34,8 +34,19 @@ async function connectDB() {
     return db;
 }
 
+async function closeDB() {
+    if (client) {
+        try {
+            await client.close();
+        } catch (e) { }
+        client = null;
+        db = null;
+    }
+}
+
 module.exports = {
     connectDB,
+    closeDB,
     MONGODB_URI,
     get getAccounts() { return require('./accounts_helper').getAccounts; },
     get loadAccounts() { return require('./accounts_helper').loadAccounts; }
