@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
 const { connectDB } = require('./db');
+const { ensureMeeshoLogin, getContextOptionsWithSession, DASHBOARD_URL } = require('./meesho_auth_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -58,40 +59,13 @@ async function fetchReturnOTPs(browser, account) {
     const { username, password } = account;
     console.log(`\n=== Fetching Return OTPs: ${username} ===`);
 
-    let contextOptions = {
-        viewport: null,
-    };
+    const contextOptions = getContextOptionsWithSession(username);
     const context = await browser.newContext(contextOptions);
 
     const page = await context.newPage();
 
     try {
-        console.log(`[${username}] Navigating to Meesho...`);
-        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
-
-        const emailInput = page.locator('input[name="emailOrPhone"]')
-            .or(page.getByRole('textbox', { name: /email/i }))
-            .or(page.locator('input[type="text"]').first());
-        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
-
-        console.log(`[${username}] Logging in...`);
-        await emailInput.first().fill(username);
-
-        const passwordInput = page.locator('input[name="password"]')
-            .or(page.getByRole('textbox', { name: /password/i }))
-            .or(page.locator('input[type="password"]').first());
-        await passwordInput.first().fill(password);
-
-        const loginBtn = page.getByRole('button', { name: /log\s*in/i })
-            .or(page.locator('button[type="submit"]'))
-            .or(page.locator('button:has-text("Log in")'));
-        await loginBtn.first().click();
-
-        try { await page.waitForLoadState('networkidle', { timeout: 5000 }); } catch (e) { }
-        await page.waitForTimeout(300);
-
-        // Close any popups that might intercept clicks
-        await clearDashboard(page);
+        await ensureMeeshoLogin(page, context, username, password);
 
         // Click on Returns tab
         console.log(`[${username}] Navigating to Returns tab...`);

@@ -1,5 +1,6 @@
 const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard, handleProceedToUpload, checkUploadError } = require('./nuke_helper');
+const { ensureMeeshoLogin, getContextOptionsWithSession, DASHBOARD_URL } = require('./meesho_auth_helper');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -284,40 +285,15 @@ async function processAccount(browser, account, uploadFiles) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
-    let contextOptions = {
-        viewport: null,
-    };
+    const contextOptions = getContextOptionsWithSession(username, { viewport: null });
     const context = await browser.newContext(contextOptions);
-
     const page = await context.newPage();
 
     const fileResults = [];
     let globalError = null;
 
     try {
-        console.log(`[${username}] Navigating to Meesho...`);
-        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
-
-        const emailInput = page.locator('input[name="emailOrPhone"]')
-            .or(page.getByRole('textbox', { name: /email/i }))
-            .or(page.locator('input[type="text"]').first());
-        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
-
-        console.log(`[${username}] Logging in now...`);
-        await emailInput.first().fill(username);
-
-        const passwordInput = page.locator('input[name="password"]')
-            .or(page.getByRole('textbox', { name: /password/i }))
-            .or(page.locator('input[type="password"]').first());
-        await passwordInput.first().fill(password);
-
-        const loginBtn = page.getByRole('button', { name: /log\s*in/i })
-            .or(page.locator('button[type="submit"]'))
-            .or(page.locator('button:has-text("Log in")'));
-        await loginBtn.first().click();
-        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
-
-        await clearDashboard(page);
+        await ensureMeeshoLogin(page, context, username, password);
 
         // Loop through ALL files
         for (let i = 0; i < uploadFiles.length; i++) {
@@ -334,8 +310,8 @@ async function processAccount(browser, account, uploadFiles) {
                 if (i > 0) {
                     console.log(`[${username}] Resetting to Dashboard for next file...`);
                     try {
-                        await page.goto(LOGIN_URL, { timeout: 20000 });
-                        await page.waitForLoadState('networkidle', { timeout: 5000 });
+                        await page.goto(DASHBOARD_URL, { timeout: 20000, waitUntil: 'domcontentloaded' });
+                        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
                     } catch (e) {
                         console.log(`[${username}] Navigation timed out. Continuing anyway...`);
                     }
@@ -485,6 +461,14 @@ async function processAccount(browser, account, uploadFiles) {
                 if (isTargetClosed || !browser || !browser.isConnected() || !page || page.isClosed()) {
                     console.error(`[${username}] ⚠️ Browser/page closed unexpectedly. Aborting remaining files for ${username}.`);
                     globalError = e.message;
+                    const remainingFiles = uploadFiles.slice(i + 1);
+                    for (const remFile of remainingFiles) {
+                        const remFileName = path.basename(remFile);
+                        fileResults.push({ file: remFileName, status: 'Failed', reason: `Aborted: browser session closed (${e.message})` });
+                        try {
+                            await logBotError(path.basename(__filename), username, `File not uploaded: ${remFileName} (Aborted: session closed)`, null, null, remFileName);
+                        } catch (err) { }
+                    }
                     break;
                 }
             }
@@ -496,6 +480,15 @@ async function processAccount(browser, account, uploadFiles) {
         try {
             const validPage = (typeof page !== 'undefined' && page && !page.isClosed()) ? page : null;
             await logBotError(path.basename(__filename), username, `Account error: ${e.message}`, validPage);
+            if (fileResults.length === 0 && uploadFiles && uploadFiles.length > 0) {
+                for (const remFile of uploadFiles) {
+                    const remFileName = path.basename(remFile);
+                    fileResults.push({ file: remFileName, status: 'Failed', reason: `Account error: ${e.message}` });
+                    try {
+                        await logBotError(path.basename(__filename), username, `File not uploaded: ${remFileName} (Account login/setup failed)`, null, null, remFileName);
+                    } catch (err) { }
+                }
+            }
         } catch (err) {
             console.log("error logging session failure", err);
         }

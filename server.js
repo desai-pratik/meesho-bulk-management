@@ -211,17 +211,11 @@ async function initializeDB() {
             }
         }
 
-        // 4. Notifications are stored strictly in client localStorage (not in JSON file, not in MongoDB)
+        // 4. Initialize notifications collection in MongoDB
         try {
-            const legacyErrorsFile = path.join(__dirname, 'errors.json');
-            if (fs.existsSync(legacyErrorsFile)) {
-                fs.unlinkSync(legacyErrorsFile);
-            }
-            const errorCols = await db.listCollections({ name: 'errors' }).toArray();
-            if (errorCols.length > 0) {
-                await db.collection('errors').drop();
-                console.log("Dropped legacy errors collection from MongoDB Atlas.");
-            }
+            await db.collection('notifications').createIndex({ id: 1 }, { unique: true });
+            await db.collection('notifications').createIndex({ timestamp: -1 });
+            console.log("MongoDB notifications index verified/created.");
         } catch (e) { }
 
         // 5. Migrate Return OTPs (One-time migration check)
@@ -328,11 +322,15 @@ async function sendOTPEmail(email, otp) {
 
 // JWT Token Authentication Middleware
 function authenticateToken(req, res, next) {
+    const url = req.originalUrl || req.url || '';
+    const p = req.path || '';
     if (
-        req.path.startsWith('/auth/') ||
-        req.path.startsWith('/api/auth/') ||
-        req.path === '/api/notifications/emit' ||
-        req.path.startsWith('/error_screenshots')
+        p.startsWith('/auth') ||
+        p.startsWith('/notifications') ||
+        p.startsWith('/error_screenshots') ||
+        url.startsWith('/api/auth') ||
+        url.startsWith('/api/notifications') ||
+        url.startsWith('/error_screenshots')
     ) {
         return next();
     }
@@ -1649,13 +1647,96 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// Notifications (Stored strictly in client localStorage, zero JSON file on disk, zero DB storage)
-app.post('/api/notifications/emit', (req, res) => {
+// Notifications (Stored persistently in MongoDB Atlas + Real-time Socket.io)
+async function saveNotification(notif) {
+    if (!notif || typeof notif !== 'object') return null;
+    try {
+        const db = await connectDB();
+        const id = notif.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        const doc = {
+            id,
+            bot: notif.bot || 'Unknown Bot',
+            account: notif.account || 'Unknown Account',
+            sku: notif.sku || null,
+            file: notif.file || null,
+            message: notif.message || '',
+            screenshot: notif.screenshot || null,
+            type: notif.type === 'success' ? 'success' : 'error',
+            timestamp: notif.timestamp || new Date().toISOString(),
+            read: notif.read === true
+        };
+        await db.collection('notifications').updateOne(
+            { id: doc.id },
+            { $set: doc },
+            { upsert: true }
+        );
+        return doc;
+    } catch (err) {
+        console.error("Failed to save notification to MongoDB:", err.message);
+        return notif;
+    }
+}
+
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const notifications = await db.collection('notifications')
+            .find({})
+            .sort({ timestamp: -1, _id: -1 })
+            .limit(1000)
+            .toArray();
+        res.json(notifications.map(({ _id, ...rest }) => rest));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/notifications/emit', async (req, res) => {
     try {
         const notif = req.body;
         if (notif && typeof notif === 'object') {
-            io.emit('notification', notif);
+            const saved = await saveNotification(notif);
+            io.emit('notification', saved || notif);
         }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/notifications/mark-read', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const { ids } = req.body || {};
+        if (Array.isArray(ids) && ids.length > 0) {
+            await db.collection('notifications').updateMany({ id: { $in: ids } }, { $set: { read: true } });
+        } else {
+            await db.collection('notifications').updateMany({}, { $set: { read: true } });
+        }
+        io.emit('notifications-marked-read');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/notifications', async (req, res) => {
+    try {
+        const db = await connectDB();
+        await db.collection('notifications').deleteMany({});
+        io.emit('notifications-cleared');
+        res.json({ success: true, message: 'All notifications cleared' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+    try {
+        const db = await connectDB();
+        const { id } = req.params;
+        await db.collection('notifications').deleteOne({ id });
+        io.emit('notification-deleted', { id });
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1777,7 +1858,7 @@ app.post('/api/run/:scriptName', async (req, res) => {
         });
         activeProcesses.set(scriptName, { child, startTime });
 
-        child.on('message', (message) => {
+        child.on('message', async (message) => {
             if (message && message.type === 'screencast') {
                 io.emit('screencast', {
                     script: scriptName,
@@ -1786,7 +1867,12 @@ app.post('/api/run/:scriptName', async (req, res) => {
                 });
             }
             if (message && message.type === 'notification') {
-                io.emit('notification', message.data);
+                try {
+                    const saved = await saveNotification(message.data);
+                    io.emit('notification', saved || message.data);
+                } catch (e) {
+                    io.emit('notification', message.data);
+                }
             }
         });
 

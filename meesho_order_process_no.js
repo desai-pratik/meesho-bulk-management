@@ -1,5 +1,6 @@
 const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
+const { ensureMeeshoLogin, getContextOptionsWithSession, DASHBOARD_URL } = require('./meesho_auth_helper');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -176,10 +177,11 @@ async function processAccount(browser, account) {
     const { username, password } = account;
     console.log(`\n=== Starting Account: ${username} ===`);
 
-    const context = await browser.newContext({
+    const contextOptions = getContextOptionsWithSession(username, {
         viewport: null,
         acceptDownloads: true // Crucial for downloading labels automatically
     });
+    const context = await browser.newContext(contextOptions);
 
     const page = await context.newPage();
 
@@ -187,35 +189,7 @@ async function processAccount(browser, account) {
     let labelDownloaded = false;
 
     try {
-        // 1. Login
-        console.log(`[${username}] Navigating to login...`);
-        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
-
-        const emailInput = page.locator('input[name="emailOrPhone"]')
-            .or(page.getByRole('textbox', { name: /email/i }))
-            .or(page.locator('input[type="text"]').first());
-        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
-
-        console.log(`[${username}] Logging in...`);
-        await emailInput.first().fill(username);
-
-        const passwordInput = page.locator('input[name="password"]')
-            .or(page.getByRole('textbox', { name: /password/i }))
-            .or(page.locator('input[type="password"]').first());
-        await passwordInput.first().fill(password);
-
-        const loginBtn = page.getByRole('button', { name: /log\s*in/i })
-            .or(page.locator('button[type="submit"]'))
-            .or(page.locator('button:has-text("Log in")'));
-        await loginBtn.first().click();
-
-        // Wait for Dashboard
-        try {
-            await page.waitForLoadState('networkidle', { timeout: 10000 });
-        } catch (e) { }
-
-        // 2. Clear Dashboard Ads
-        await clearDashboard(page);
+        await ensureMeeshoLogin(page, context, username, password);
 
         // 3. Go to Orders section
         console.log(`[${username}] Going to Orders page...`);

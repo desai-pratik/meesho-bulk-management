@@ -51,7 +51,35 @@ function Notifications({ socket }) {
     }
   };
 
+  const fetchBackendNotifications = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/notifications`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        saveToLocal(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch notifications from backend:", e);
+    }
+  };
+
   useEffect(() => {
+    // Initial fetch on mount
+    fetchBackendNotifications();
+
+    // Re-fetch whenever tab becomes visible or window gains focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBackendNotifications();
+      }
+    };
+    const handleFocus = () => {
+      fetchBackendNotifications();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // Listen to real-time socket events for live incoming notifications
     if (socket) {
       const handleNewNotification = (notif) => {
@@ -66,12 +94,46 @@ function Notifications({ socket }) {
         });
       };
 
+      const handleCleared = () => {
+        setErrors([]);
+        try {
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+          window.dispatchEvent(new Event('notifications-updated'));
+        } catch (e) { }
+      };
+
+      const handleDeleted = (data) => {
+        if (data && data.id) {
+          setErrors(prev => {
+            const updated = prev.filter(n => n.id !== data.id);
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+              window.dispatchEvent(new Event('notifications-updated'));
+            } catch (e) { }
+            return updated;
+          });
+        }
+      };
+
       socket.on('notification', handleNewNotification);
+      socket.on('notifications-cleared', handleCleared);
+      socket.on('notification-deleted', handleDeleted);
+      socket.on('connect', fetchBackendNotifications);
 
       return () => {
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
         socket.off('notification', handleNewNotification);
+        socket.off('notifications-cleared', handleCleared);
+        socket.off('notification-deleted', handleDeleted);
+        socket.off('connect', fetchBackendNotifications);
       };
     }
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [socket]);
 
   // Sync with localStorage if updated in another tab or component
@@ -97,12 +159,24 @@ function Notifications({ socket }) {
     };
   }, []);
 
-  const clearAll = () => {
-    if (!window.confirm("Are you sure you want to clear all notifications from local storage?")) return;
+  const clearAll = async () => {
+    if (!window.confirm("Are you sure you want to clear all notifications?")) return;
+    try {
+      await fetch(`${BACKEND_URL}/api/notifications`, { method: 'DELETE' });
+    } catch (e) {
+      console.error("Failed to delete notifications on server:", e);
+    }
     saveToLocal([]);
   };
 
-  const deleteSingleError = (err, originalIdx) => {
+  const deleteSingleError = async (err, originalIdx) => {
+    if (err.id) {
+      try {
+        await fetch(`${BACKEND_URL}/api/notifications/${err.id}`, { method: 'DELETE' });
+      } catch (e) {
+        console.error("Failed to delete notification on server:", e);
+      }
+    }
     const updated = errors.filter((e, idx) => (err.id ? e.id !== err.id : idx !== originalIdx));
     saveToLocal(updated);
   };
@@ -126,7 +200,7 @@ function Notifications({ socket }) {
             )}
           </h2>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Stored in browser local storage
+            Persistently saved in Database & Synced Live
           </div>
         </div>
 

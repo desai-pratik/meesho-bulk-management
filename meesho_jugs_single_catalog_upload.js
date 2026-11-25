@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
 const { nukePopups, clearDashboard } = require('./nuke_helper');
+const { ensureMeeshoLogin, getContextOptionsWithSession, DASHBOARD_URL } = require('./meesho_auth_helper');
 const { connectDB } = require('./db');
 
 const { AsyncLocalStorage } = require('async_hooks');
@@ -394,34 +395,18 @@ async function processAccount(browser, account, groups, defaults) {
     const { username, password } = account;
     console.log(`\n=== Starting Jugs Single Catalog Uploads for: ${username} ===`);
 
-    let contextOptions = { viewport: null };
+    const contextOptions = getContextOptionsWithSession(username, { viewport: null });
     const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     const results = [];
 
     try {
-        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
-
-        const emailInput = page.locator('input[name="emailOrPhone"]')
-            .or(page.getByRole('textbox', { name: /email/i }))
-            .or(page.locator('input[type="text"]').first());
-        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
-
-        console.log(`  > Logging in...`);
-        await emailInput.first().fill(username);
-        const passwordInput = page.locator('input[name="password"]')
-            .or(page.getByRole('textbox', { name: /password/i }))
-            .or(page.locator('input[type="password"]').first());
-        await passwordInput.first().fill(password);
-        await page.getByRole('button', { name: 'Log in', exact: true }).click();
-        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch(e) {}
-        
-        await clearDashboard(page);
+        await ensureMeeshoLogin(page, context, username, password);
 
         for (const group of groups) {
             console.log(`\n[${username}] Processing Jugs SKU: ${group.sku}`);
             try {
-                await page.goto(LOGIN_URL, { timeout: 20000 });
+                await page.goto(DASHBOARD_URL, { timeout: 20000, waitUntil: 'domcontentloaded' });
                 await clearDashboard(page);
                 
                 console.log(`  > Opening Catalog Uploads...`);

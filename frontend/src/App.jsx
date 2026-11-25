@@ -58,7 +58,8 @@ function App() {
   const [scripts, setScripts] = useState([]);
   const [fileCount, setFileCount] = useState(0);
   const [accountCount, setAccountCount] = useState(0);
-  const [errorCount, setErrorCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [hasNotificationErrors, setHasNotificationErrors] = useState(false);
 
   const handleLoginSuccess = (newToken, newUser) => {
     localStorage.setItem('token', newToken);
@@ -82,20 +83,35 @@ function App() {
     return () => window.removeEventListener('auth-error', handleAuthError);
   }, []);
 
-  const updateNotificationsCount = () => {
+  const fetchAndSyncNotifications = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/notifications`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        localStorage.setItem('meesho_notifications', JSON.stringify(data));
+        setNotificationCount(data.length);
+        setHasNotificationErrors(data.some(n => n.type !== 'success'));
+        return;
+      }
+    } catch (e) { }
+
     try {
       const saved = localStorage.getItem('meesho_notifications');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setErrorCount(parsed.length);
+          setNotificationCount(parsed.length);
+          setHasNotificationErrors(parsed.some(n => n.type !== 'success'));
           return;
         }
       }
-      setErrorCount(0);
-    } catch (e) {
-      setErrorCount(0);
-    }
+    } catch (e) { }
+    setNotificationCount(0);
+    setHasNotificationErrors(false);
+  };
+
+  const updateNotificationsCount = () => {
+    fetchAndSyncNotifications();
   };
 
   useEffect(() => {
@@ -114,7 +130,20 @@ function App() {
       .catch(err => console.error("Error fetching files:", err));
 
     updateAccountCount();
-    updateNotificationsCount();
+    fetchAndSyncNotifications();
+
+    // Re-fetch notifications whenever tab becomes visible or window gains focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAndSyncNotifications();
+      }
+    };
+    const handleFocus = () => {
+      fetchAndSyncNotifications();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Listen for logs
     socket.on('log', (data) => {
@@ -157,13 +186,35 @@ function App() {
         const parsed = saved ? JSON.parse(saved) : [];
         const updated = [notif, ...parsed.filter(n => n.id !== notif.id)].slice(0, 500);
         localStorage.setItem('meesho_notifications', JSON.stringify(updated));
-        setErrorCount(updated.length);
+        setNotificationCount(updated.length);
+        setHasNotificationErrors(updated.some(n => n.type !== 'success'));
+        window.dispatchEvent(new Event('notifications-updated'));
+      } catch (e) { }
+    };
+
+    const handleSocketCleared = () => {
+      setNotificationCount(0);
+      setHasNotificationErrors(false);
+      try {
+        localStorage.removeItem('meesho_notifications');
+        window.dispatchEvent(new Event('notifications-updated'));
+      } catch (e) { }
+    };
+
+    const handleSocketDeleted = (data) => {
+      try {
+        const saved = localStorage.getItem('meesho_notifications');
+        const parsed = saved ? JSON.parse(saved) : [];
+        const updated = parsed.filter(n => n.id !== data?.id);
+        localStorage.setItem('meesho_notifications', JSON.stringify(updated));
+        setNotificationCount(updated.length);
+        setHasNotificationErrors(updated.some(n => n.type !== 'success'));
         window.dispatchEvent(new Event('notifications-updated'));
       } catch (e) { }
     };
 
     const handleNotificationsChanged = () => {
-      updateNotificationsCount();
+      fetchAndSyncNotifications();
     };
 
     const handleAccountsChanged = () => {
@@ -171,15 +222,24 @@ function App() {
     };
 
     socket.on('notification', handleSocketNotification);
+    socket.on('notifications-cleared', handleSocketCleared);
+    socket.on('notification-deleted', handleSocketDeleted);
+    socket.on('connect', fetchAndSyncNotifications);
+
     window.addEventListener('notifications-updated', handleNotificationsChanged);
     window.addEventListener('selected-accounts-updated', handleAccountsChanged);
     window.addEventListener('storage', handleNotificationsChanged);
     window.addEventListener('storage', handleAccountsChanged);
 
     return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       socket.off('log');
       socket.off('processStatus');
       socket.off('notification', handleSocketNotification);
+      socket.off('notifications-cleared', handleSocketCleared);
+      socket.off('notification-deleted', handleSocketDeleted);
+      socket.off('connect', fetchAndSyncNotifications);
       window.removeEventListener('notifications-updated', handleNotificationsChanged);
       window.removeEventListener('selected-accounts-updated', handleAccountsChanged);
       window.removeEventListener('storage', handleNotificationsChanged);
@@ -347,7 +407,20 @@ function App() {
             className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'glass-panel'}`}
             onClick={() => setIsSidebarOpen(false)}
           >
-            <Bell size={18} /> Notifications {errorCount > 0 && <span style={{ background: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.8rem', position: 'absolute', top: '14px', right: '14px', color: 'white' }}>{errorCount}</span>}
+            <Bell size={18} /> Notifications {notificationCount > 0 && (
+              <span style={{
+                background: hasNotificationErrors ? 'var(--danger)' : 'var(--success)',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '0.8rem',
+                position: 'absolute',
+                top: '14px',
+                right: '14px',
+                color: 'white'
+              }}>
+                {notificationCount}
+              </span>
+            )}
           </NavLink>
         </nav>
 

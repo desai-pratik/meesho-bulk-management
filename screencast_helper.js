@@ -150,15 +150,78 @@ function wrapPlaywright(chromiumLauncher) {
                 }
                 const sanitizedOptions = { ...contextOptions };
                 if (!sanitizedOptions.timezoneId) sanitizedOptions.timezoneId = 'Asia/Kolkata';
+                if (!sanitizedOptions.locale) sanitizedOptions.locale = 'en-US';
+                if (!sanitizedOptions.userAgent) {
+                    sanitizedOptions.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+                }
 
                 const context = await originalNewContext.call(browser, sanitizedOptions);
-                
+
+                // Inject stealth and anti-bot evasions across all contexts
+                try {
+                    await context.addInitScript(() => {
+                        // 1. Hide navigator.webdriver
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+                        // 2. Mock chrome runtime object
+                        window.chrome = {
+                            runtime: {},
+                            loadTimes: function () { },
+                            csi: function () { },
+                            app: {}
+                        };
+
+                        // 3. Mock realistic languages and plugins
+                        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                        const fakePlugins = [
+                            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+                        ];
+                        Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
+                    });
+                } catch (e) {}
+
+                function wrapPageNavigation(page) {
+                    const originalGoto = page.goto;
+                    page.goto = async function (url, options) {
+                        // Protect against redundant /login visits when already logged in
+                        if (typeof url === 'string' && url.includes('/panel/v3/new/root/login')) {
+                            const curUrl = page.url();
+                            if (curUrl && curUrl.includes('/panel/v3/new/') && !curUrl.includes('/root/login')) {
+                                console.log('[ScreencastHelper] 🛡️ Intercepted redundant LOGIN_URL visit while authenticated. Redirecting to Dashboard to prevent Akamai WAF blocks.');
+                                url = 'https://supplier.meesho.com/panel/v3/new/growth/cataloging';
+                            }
+                        }
+
+                        let res;
+                        try {
+                            res = await originalGoto.call(page, url, options);
+                        } catch (err) {
+                            throw err;
+                        }
+
+                        // Check for Akamai Access Denied
+                        try {
+                            const title = await page.title().catch(() => '');
+                            if (title.toLowerCase().includes('access denied')) {
+                                console.error('\n⚠️ [Akamai Access Denied Detected]: Rate limit triggered by excessive login requests.');
+                                console.error('  Pausing 15s to allow Akamai rate-limits to cool down...\n');
+                                await page.waitForTimeout(15000);
+                            }
+                        } catch (e) {}
+
+                        return res;
+                    };
+                }
+
                 const originalNewPage = context.newPage;
                 context.newPage = async function () {
                     if (isShuttingDown || !browser.isConnected()) {
                         throw new Error("Target page, context or browser has been closed");
                     }
                     const page = await originalNewPage.apply(context, arguments);
+                    wrapPageNavigation(page);
                     setupScreencast(page);
                     return page;
                 };

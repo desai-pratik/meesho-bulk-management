@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { logBotError, logBotSuccess } = require('./logger');
 const { connectDB } = require('./db');
+const { ensureMeeshoLogin, getContextOptionsWithSession, DASHBOARD_URL } = require('./meesho_auth_helper');
 
 const { AsyncLocalStorage } = require('async_hooks');
 const asyncLocalStorage = new AsyncLocalStorage();
@@ -60,41 +61,13 @@ async function fetchAccountStats(browser, account) {
     const { username, password } = account;
     console.log(`\n=== Fetching Stats: ${username} ===`);
 
-    let contextOptions = {
-        viewport: null,
-    };
+    const contextOptions = getContextOptionsWithSession(username);
     const context = await browser.newContext(contextOptions);
 
     const page = await context.newPage();
 
     try {
-        console.log(`[${username}] Navigating to Meesho...`);
-        await page.goto(LOGIN_URL, { timeout: 35000, waitUntil: 'domcontentloaded' });
-
-        const emailInput = page.locator('input[name="emailOrPhone"]')
-            .or(page.getByRole('textbox', { name: /email/i }))
-            .or(page.locator('input[type="text"]').first());
-        await emailInput.first().waitFor({ state: 'visible', timeout: 30000 });
-
-        console.log(`[${username}] Logging in...`);
-        await emailInput.first().fill(username);
-
-        const passwordInput = page.locator('input[name="password"]')
-            .or(page.getByRole('textbox', { name: /password/i }))
-            .or(page.locator('input[type="password"]').first());
-        await passwordInput.first().fill(password);
-
-        const loginBtn = page.getByRole('button', { name: /log\s*in/i })
-            .or(page.locator('button[type="submit"]'))
-            .or(page.locator('button:has-text("Log in")'));
-        await loginBtn.first().click();
-        try { await page.waitForLoadState('networkidle', { timeout: 10000 }); } catch (e) {}
-
-        // Wait a bit for the dashboard data to populate
-        await page.waitForTimeout(3000);
-
-        // Close any popups that might intercept clicks
-        await clearDashboard(page);
+        await ensureMeeshoLogin(page, context, username, password);
 
         console.log(`[${username}] Extracting Pending Orders from Dashboard...`);
         const count = await page.evaluate(() => {

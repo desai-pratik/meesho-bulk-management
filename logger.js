@@ -16,7 +16,7 @@ function emitNotification(logEntry) {
         const data = JSON.stringify(logEntry);
         const req = http.request({
             hostname: '127.0.0.1',
-            port: 3001,
+            port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3001,
             path: '/api/notifications/emit',
             method: 'POST',
             headers: {
