@@ -38,9 +38,29 @@ const io = new Server(server, {
 
 // Map of currently running processes
 const activeProcesses = new Map();
+const lastScreencast = new Map();
+const recentLogs = new Map();
 
 io.on('connection', (socket) => {
-    // Client connected
+    // When client connects, immediately sync status, screencast, and logs if a bot is running
+    for (const [scriptName, proc] of activeProcesses.entries()) {
+        socket.emit('processStatus', {
+            script: scriptName,
+            status: 'running',
+            startTime: proc.startTime
+        });
+
+        if (lastScreencast.has(scriptName)) {
+            socket.emit('screencast', lastScreencast.get(scriptName));
+        }
+
+        if (recentLogs.has(scriptName)) {
+            const logs = recentLogs.get(scriptName);
+            for (const entry of logs) {
+                socket.emit('log', entry);
+            }
+        }
+    }
 });
 
 // Helpers for file paths
@@ -98,7 +118,16 @@ const storage = multer.diskStorage({
         cb(null, file.originalname); // Keep original filename
     }
 });
-const upload = multer({ storage: storage });
+const upload = multer({
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+        if (file.originalname && file.originalname.toLowerCase().endsWith('.xlsx')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only .xlsx files are allowed!'), false);
+        }
+    }
+});
 
 // Multer Config for Single Catalog Images (.jpg, .png)
 const imageStorage = multer.diskStorage({
@@ -1601,12 +1630,13 @@ app.get('/api/files', (req, res) => {
     }
 });
 
-app.post('/api/files', upload.array('files'), (req, res) => {
-    try {
+app.post('/api/files', (req, res) => {
+    upload.array('files')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ success: false, error: err.message });
+        }
         res.json({ success: true, message: 'Files uploaded successfully', files: req.files });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    });
 });
 
 app.delete('/api/files/:filename', (req, res) => {
@@ -1858,13 +1888,22 @@ app.post('/api/run/:scriptName', async (req, res) => {
         });
         activeProcesses.set(scriptName, { child, startTime });
 
+        let lastScreencastBroadcast = 0;
         child.on('message', async (message) => {
             if (message && message.type === 'screencast') {
-                io.emit('screencast', {
+                const now = Date.now();
+                const framePayload = {
                     script: scriptName,
                     image: message.image,
                     url: message.url
-                });
+                };
+                lastScreencast.set(scriptName, framePayload);
+
+                // Live real-time socket broadcasts (at most 50ms debounce)
+                if (now - lastScreencastBroadcast >= 50) {
+                    lastScreencastBroadcast = now;
+                    io.emit('screencast', framePayload);
+                }
             }
             if (message && message.type === 'notification') {
                 try {
@@ -1879,19 +1918,33 @@ app.post('/api/run/:scriptName', async (req, res) => {
         child.stdout.on('data', (data) => {
             const msg = data.toString();
             console.log(`[${scriptName}] ${msg.trim()}`);
-            io.emit('log', { script: scriptName, type: 'info', message: msg });
+            const logEntry = { script: scriptName, type: 'info', message: msg };
+            io.emit('log', logEntry);
+
+            if (!recentLogs.has(scriptName)) recentLogs.set(scriptName, []);
+            const logs = recentLogs.get(scriptName);
+            logs.push(logEntry);
+            if (logs.length > 80) logs.shift();
         });
 
         child.stderr.on('data', (data) => {
             const msg = data.toString();
             console.error(`[${scriptName} ERROR] ${msg.trim()}`);
-            io.emit('log', { script: scriptName, type: 'error', message: msg });
+            const logEntry = { script: scriptName, type: 'error', message: msg };
+            io.emit('log', logEntry);
+
+            if (!recentLogs.has(scriptName)) recentLogs.set(scriptName, []);
+            const logs = recentLogs.get(scriptName);
+            logs.push(logEntry);
+            if (logs.length > 80) logs.shift();
         });
 
         child.on('close', (code) => {
             console.log(`[${scriptName}] Exited with code ${code}`);
             io.emit('log', { script: scriptName, type: 'system', message: `Process exited with code ${code}` });
             activeProcesses.delete(scriptName);
+            lastScreencast.delete(scriptName);
+            recentLogs.delete(scriptName);
             io.emit('processStatus', { script: scriptName, status: 'stopped' });
         });
 

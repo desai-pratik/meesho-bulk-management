@@ -39,6 +39,7 @@ function LiveBrowserFeed({ socket, scripts, logs }) {
     if (!socket) return;
 
     const handleScreencast = (data) => {
+      if (!data || !data.image) return;
       // Find the display name for the script
       const scriptInfo = scripts?.find(s => s.filename === data.script);
       const displayName = scriptInfo ? scriptInfo.name : data.script;
@@ -55,14 +56,14 @@ function LiveBrowserFeed({ socket, scripts, logs }) {
     };
   }, [socket, scripts]);
 
-  // Reset the feed if no script is running
+  // Reset the feed only when scripts are loaded and none is running
   useEffect(() => {
-    if (!runningScript) {
+    if (scripts && scripts.length > 0 && !runningScript) {
       setScreencast(null);
       setCurrentUrl('');
       setActiveScriptName('');
     }
-  }, [runningScript]);
+  }, [runningScript, scripts]);
 
   return (
     <div className="glass-panel" style={{ marginTop: '2rem', padding: '1.5rem' }}>

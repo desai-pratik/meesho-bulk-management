@@ -187,12 +187,7 @@ async function ensureOnInventoryPage(page) {
     console.log("  > Fallback: Navigating directly to Inventory URL...");
     const curUrl = page.url();
     if (curUrl.includes('/edit-product') || !curUrl.includes('/inventory')) {
-        const inventoryUrl = curUrl.replace(/\/edit-product.*$/, '/inventory');
-        if (inventoryUrl !== curUrl && inventoryUrl.includes('/inventory')) {
-            await page.goto(inventoryUrl, { timeout: 20000 }).catch(() => { });
-        } else {
-            await page.goto('https://supplier.meesho.com/panel/v3/new/growth/inventory', { timeout: 20000 }).catch(() => { });
-        }
+        await page.goto('https://supplier.meesho.com/panel/v3/new/growth/inventory', { timeout: 20000 }).catch(() => { });
         await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => { });
         await clearDashboard(page).catch(() => { });
     }

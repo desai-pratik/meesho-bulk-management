@@ -185,12 +185,25 @@ function wrapPlaywright(chromiumLauncher) {
                 function wrapPageNavigation(page) {
                     const originalGoto = page.goto;
                     page.goto = async function (url, options) {
-                        // Protect against redundant /login visits when already logged in
-                        if (typeof url === 'string' && url.includes('/panel/v3/new/root/login')) {
-                            const curUrl = page.url();
-                            if (curUrl && curUrl.includes('/panel/v3/new/') && !curUrl.includes('/root/login')) {
-                                console.log('[ScreencastHelper] 🛡️ Intercepted redundant LOGIN_URL visit while authenticated. Redirecting to Dashboard to prevent Akamai WAF blocks.');
-                                url = 'https://supplier.meesho.com/panel/v3/new/growth/cataloging';
+                        if (typeof url === 'string') {
+                            // 1. Force HTTPS on all Meesho supplier URLs (plain HTTP triggers Akamai Access Denied)
+                            if (url.startsWith('http://supplier.meesho.com')) {
+                                url = url.replace('http://supplier.meesho.com', 'https://supplier.meesho.com');
+                            }
+
+                            // 2. Protect against redundant /login visits when already logged in
+                            if (url.includes('/panel/v3/new/root/login')) {
+                                const curUrl = page.url();
+                                if (curUrl && curUrl.includes('/panel/v3/new/') && !curUrl.includes('/root/login')) {
+                                    console.log('[ScreencastHelper] 🛡️ Intercepted redundant LOGIN_URL visit while authenticated. Redirecting to Dashboard.');
+                                    url = 'https://supplier.meesho.com/panel/v3/new/growth/cataloging';
+                                }
+                            }
+
+                            // 3. Fix invalid /services/.../inventory URLs (Akamai blocks direct /services/ microservice paths with Access Denied)
+                            if (url.includes('/panel/v3/new/services/') && url.includes('/inventory')) {
+                                console.log('[ScreencastHelper] 🛡️ Corrected microservice URL to official Inventory dashboard.');
+                                url = 'https://supplier.meesho.com/panel/v3/new/growth/inventory';
                             }
                         }
 
@@ -201,13 +214,20 @@ function wrapPlaywright(chromiumLauncher) {
                             throw err;
                         }
 
-                        // Check for Akamai Access Denied
+                        // Check for Akamai Access Denied on resulting page
                         try {
-                            const title = await page.title().catch(() => '');
-                            if (title.toLowerCase().includes('access denied')) {
-                                console.error('\n⚠️ [Akamai Access Denied Detected]: Rate limit triggered by excessive login requests.');
-                                console.error('  Pausing 15s to allow Akamai rate-limits to cool down...\n');
-                                await page.waitForTimeout(15000);
+                            const title = (await page.title().catch(() => '')) || '';
+                            const isDenied = title.toLowerCase().includes('access denied') || await page.evaluate(() => {
+                                const body = document.body ? document.body.innerText.toLowerCase() : '';
+                                return body.includes('access denied') && (body.includes('edgesuite.net') || body.includes('permission to access'));
+                            }).catch(() => false);
+
+                            if (isDenied) {
+                                console.error('\n⚠️ [Akamai Access Denied Detected]: Access Denied page encountered.');
+                                console.error(`  Blocked URL: ${page.url()}`);
+                                console.error('  Auto-recovering: Pausing 5s then returning to official dashboard...\n');
+                                await page.waitForTimeout(5000);
+                                await originalGoto.call(page, 'https://supplier.meesho.com/panel/v3/new/growth/cataloging', { timeout: 25000, waitUntil: 'domcontentloaded' }).catch(() => {});
                             }
                         } catch (e) {}
 
@@ -243,65 +263,123 @@ function wrapPlaywright(chromiumLauncher) {
     }
 }
 
+let activePage = null;
+
 async function setupScreencast(page) {
-    if (!process.send || !page || page._screencastSetup) return;
+    if (!process.send || !page) return;
+    activePage = page;
+    if (page._screencastSetup) return;
     page._screencastSetup = true;
 
-    try {
-        const client = await page.context().newCDPSession(page);
-        
-        await client.send('Page.startScreencast', {
-            format: 'jpeg',
-            quality: 60,
-            maxWidth: 1024,
-            maxHeight: 768,
-            everyNthFrame: 1
-        });
+    let cdpClient = null;
+    let isCapturing = false;
+    let lastFrameTime = 0;
+    let fallbackInterval = null;
 
-        client.on('Page.screencastFrame', async (frame) => {
-            try {
-                if (page.isClosed()) return;
-                
-                const url = page.url();
-                process.send({
-                    type: 'screencast',
-                    image: `data:image/jpeg;base64,${frame.data}`,
-                    url: url
-                });
+    const emitFrame = (base64Data, url) => {
+        if (!process.send || isShuttingDown) return;
+        lastFrameTime = Date.now();
+        try {
+            const img = base64Data.startsWith('data:') ? base64Data : `data:image/jpeg;base64,${base64Data}`;
+            const targetUrl = url || (page.isClosed() ? '' : page.url()) || 'https://supplier.meesho.com/';
+            process.send({
+                type: 'screencast',
+                image: img,
+                url: targetUrl
+            });
+        } catch (e) {}
+    };
 
-                await client.send('Page.screencastFrameAck', { sessionId: frame.sessionId });
-            } catch (err) {}
-        });
-    } catch (e) {
-        let isCapturing = false;
-        const interval = setInterval(async () => {
-            if (page.isClosed() || isShuttingDown) {
-                clearInterval(interval);
-                return;
-            }
-            if (isCapturing) return;
+    const startCDP = async () => {
+        if (page.isClosed() || isShuttingDown) return;
+        try {
+            cdpClient = await page.context().newCDPSession(page);
+
+            await cdpClient.send('Page.startScreencast', {
+                format: 'jpeg',
+                quality: 45,
+                maxWidth: 960,
+                maxHeight: 600,
+                everyNthFrame: 1 // Send on every paint so UI updates live immediately
+            });
+
+            cdpClient.on('Page.screencastFrame', (frame) => {
+                // Immediately ACK frame to Chrome so Chrome never stalls
+                cdpClient.send('Page.screencastFrameAck', { sessionId: frame.sessionId }).catch(() => {});
+
+                if (page.isClosed() || activePage !== page) return;
+
+                // Live stream at up to 12.5 FPS (80ms throttle)
+                const now = Date.now();
+                if (now - lastFrameTime >= 80) {
+                    emitFrame(frame.data, page.url());
+                }
+            });
+
+            cdpClient.on('close', () => { cdpClient = null; });
+            cdpClient.on('error', () => { cdpClient = null; });
+        } catch (e) {
+            cdpClient = null;
+        }
+    };
+
+    // Fast watchdog heartbeat:
+    // 1. Reconnects CDP if closed/dropped
+    // 2. If page is idle (no paints for >800ms), takes a quick screenshot so feed stays truly live
+    fallbackInterval = setInterval(async () => {
+        if (page.isClosed() || isShuttingDown) {
+            clearInterval(fallbackInterval);
+            return;
+        }
+        if (activePage !== page) return;
+
+        const timeSinceLastFrame = Date.now() - lastFrameTime;
+
+        if (!cdpClient && timeSinceLastFrame > 1200) {
+            await startCDP().catch(() => {});
+        }
+
+        if (timeSinceLastFrame >= 800 && !isCapturing) {
             isCapturing = true;
-
             try {
                 const screenshotBuffer = await page.screenshot({
                     type: 'jpeg',
-                    quality: 50
+                    quality: 40
                 });
-                const base64 = screenshotBuffer.toString('base64');
-                const url = page.url();
-                
-                process.send({
-                    type: 'screencast',
-                    image: `data:image/jpeg;base64,${base64}`,
-                    url: url
-                });
+                emitFrame(screenshotBuffer.toString('base64'), page.url());
             } catch (err) {
-                if (err.message.includes('closed') || err.message.includes('Target closed') || err.message.includes('Browser closed')) {
-                    clearInterval(interval);
+                if (err.message && (err.message.includes('closed') || err.message.includes('Target closed') || err.message.includes('Browser closed'))) {
+                    clearInterval(fallbackInterval);
                 }
             } finally {
                 isCapturing = false;
             }
-        }, 1000);
-    }
+        }
+    }, 600);
+
+    // Immediate frame on navigation
+    page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame() && activePage === page && !page.isClosed()) {
+            setTimeout(async () => {
+                try {
+                    if (!page.isClosed() && activePage === page) {
+                        const buf = await page.screenshot({ type: 'jpeg', quality: 40 });
+                        emitFrame(buf.toString('base64'), page.url());
+                    }
+                } catch (e) {}
+            }, 100);
+        }
+    });
+
+    // Initial CDP start and immediate first frame
+    await startCDP();
+    try {
+        const initialBuffer = await page.screenshot({ type: 'jpeg', quality: 40 });
+        emitFrame(initialBuffer.toString('base64'), page.url());
+    } catch (e) {}
+
+    page.on('close', () => {
+        clearInterval(fallbackInterval);
+        if (activePage === page) activePage = null;
+    });
 }

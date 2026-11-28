@@ -173,9 +173,9 @@ async function injectBackgroundPoller(page) {
                 } catch(err) {}
             };
 
-            // Run immediately, then poll every 100ms for responsive cleanup
+            // Run immediately, then poll every 1200ms (avoids CPU/DOM thrashing that causes browser hangs)
             runNuke();
-            setInterval(runNuke, 100);
+            setInterval(runNuke, 1200);
         };
 
         // 1. Inject on current page immediately

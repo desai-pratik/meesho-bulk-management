@@ -25,12 +25,26 @@ function FileManager({ onUpdateFileCount }) {
   }, []);
 
   const handleUpload = async (event) => {
-    const selectedFiles = event.target.files;
-    if (!selectedFiles || selectedFiles.length === 0) return;
+    const rawFiles = event.target?.files || event;
+    if (!rawFiles || rawFiles.length === 0) return;
+
+    const fileList = Array.from(rawFiles);
+    const xlsxFiles = fileList.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const rejectedFiles = fileList.filter(f => !f.name.toLowerCase().endsWith('.xlsx'));
+
+    if (xlsxFiles.length === 0) {
+      alert("Only .xlsx files are allowed. Please select Excel (.xlsx) files.");
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (rejectedFiles.length > 0) {
+      alert(`Note: ${rejectedFiles.length} non-.xlsx file(s) were ignored: ${rejectedFiles.map(f => f.name).join(', ')}`);
+    }
 
     const formData = new FormData();
-    for (let i = 0; i < selectedFiles.length; i++) {
-      formData.append('files', selectedFiles[i]);
+    for (let i = 0; i < xlsxFiles.length; i++) {
+      formData.append('files', xlsxFiles[i]);
     }
 
     setUploading(true);
@@ -51,6 +65,19 @@ function FileManager({ onUpdateFileCount }) {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUpload({ target: { files: e.dataTransfer.files } });
     }
   };
 
@@ -138,13 +165,16 @@ function FileManager({ onUpdateFileCount }) {
             transition: 'all 0.3s'
           }}
           onClick={() => fileInputRef.current?.click()}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
         >
           <UploadCloud size={48} color="var(--primary)" style={{ marginBottom: '1rem' }} />
-          <h3 style={{ marginBottom: '0.5rem' }}>Click to Upload Files</h3>
-          <p style={{ color: 'var(--text-muted)' }}>or drag and drop them here</p>
+          <h3 style={{ marginBottom: '0.5rem' }}>Click to Upload .xlsx Files</h3>
+          <p style={{ color: 'var(--text-muted)' }}>or drag and drop .xlsx files here (only .xlsx accepted)</p>
           <input
             type="file"
             multiple
+            accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             ref={fileInputRef}
             onChange={handleUpload}
             style={{ display: 'none' }}
